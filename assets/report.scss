@@ -1,0 +1,150 @@
+/*
+Report and site theme layered over cosmo: quiet, institutional,
+table-first. Used by _quarto.yml (site-wide) and by the standalone
+report render (report.py copies this file next to the emitted qmd).
+*/
+
+/*-- scss:defaults --*/
+
+$primary: #1f3a5f;
+$link-color: #24466e;
+$body-color: #1f2933;
+$font-family-sans-serif: -apple-system, "Segoe UI", Roboto,
+  "Helvetica Neue", Arial, sans-serif;
+$headings-font-weight: 650;
+$font-size-root: 16px;
+
+/*-- scss:rules --*/
+
+// ---- title block ----------------------------------------------------
+#title-block-header {
+  margin-bottom: 2rem;
+
+  .title {
+    font-size: 1.7rem;
+    letter-spacing: -0.015em;
+    color: #14243c;
+  }
+
+  .subtitle {
+    color: #616e7c;
+    font-size: 1rem;
+    margin-top: 0.35rem;
+  }
+
+  .date {
+    color: #9aa5b1;
+    font-size: 0.85rem;
+  }
+}
+
+// ---- headings -------------------------------------------------------
+h1:not(.title) {
+  font-size: 1.3rem;
+  color: #14243c;
+  border-bottom: 1px solid #dde3ea;
+  padding-bottom: 0.4rem;
+  margin-top: 2.6rem;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 1.05rem;
+  color: #2d3f55;
+  margin-top: 1.8rem;
+}
+
+// ---- tables: the report's main surface ------------------------------
+.table {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  margin: 1rem 0 1.5rem;
+
+  thead th {
+    border-bottom: 2px solid $primary;
+    color: #3e4c59;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  td,
+  th {
+    padding: 0.32rem 0.6rem;
+    border-color: #edf1f5;
+  }
+
+  tbody tr:hover {
+    background: #f5f8fb;
+  }
+
+  // pooled / INSTITUTION summary rows read as totals
+  tbody tr:last-child td {
+    border-top: 1px solid #cbd5e0;
+  }
+}
+
+// ---- the scope note and other blockquotes ---------------------------
+blockquote {
+  border-left: 3px solid $primary;
+  background: #f4f7fa;
+  padding: 0.7rem 1.1rem;
+  color: #3e4c59;
+  font-size: 0.92rem;
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// ---- the 10b worked EXAMPLE: visibly labeled as illustration --------
+.worked-example blockquote {
+  border-left-color: #b7791f;
+  background: #fbf6ec;
+  color: #4d3b1f;
+}
+
+// ---- figures ---------------------------------------------------------
+figure {
+  margin: 1.4rem 0;
+
+  img {
+    max-width: 100%;
+  }
+
+  figcaption {
+    color: #7b8794;
+    font-size: 0.85rem;
+    margin-top: 0.4rem;
+  }
+}
+
+// ---- table of contents ----------------------------------------------
+#TOC,
+nav[role="doc-toc"] {
+  font-size: 0.85rem;
+
+  a {
+    color: #52606d;
+  }
+
+  a.active {
+    color: $primary;
+    font-weight: 600;
+  }
+}
+
+// ---- print ----------------------------------------------------------
+@media print {
+  .table tbody tr:hover {
+    background: transparent;
+  }
+
+  h1:not(.title) {
+    break-after: avoid;
+  }
+
+  figure,
+  .table {
+    break-inside: avoid;
+  }
+}

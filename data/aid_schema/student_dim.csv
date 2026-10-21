@@ -1,0 +1,3 @@
+student_id,sis_id,pf_id,sfdc_id,institution,career,program_code,term_start_cohort,admit_term,citizenship_country,visa_status,residency,first_gen_flag
+S0001,MCM12345,PF98765,SF-001,MCM,UG,MUS-BA,2023FA,2023FA,US,,Domestic,1
+S0002,MCC54321,PF12345,SF-002,MCC,UG,DAN-BFA,2022FA,2022FA,CN,F1,International,0

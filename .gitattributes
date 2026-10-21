@@ -1,0 +1,6 @@
+# Keep GitHub's language stats focused on the Python — the synthetic data
+# is generated (`make data`), not authored, and the aid schema is fixtures.
+data/synthetic_enrollment.csv linguist-generated=true
+data/aid_schema/*.csv linguist-vendored=true
+data/reference/*.csv linguist-vendored=true
+docs/figures/*.png linguist-generated=true

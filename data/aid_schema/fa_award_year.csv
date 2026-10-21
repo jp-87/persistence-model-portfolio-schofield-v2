@@ -1,0 +1,3 @@
+student_id,award_year,pf_budget_group,sai_or_efc,pell_flag,pell_award,seog_award,inst_need_grant_total,inst_merit_scholarship_total,outside_scholarship_total,federal_sub_loan,federal_unsub_loan,parent_plus_amount,private_loan_amount,work_study,pf_is_packaged_flag,pf_packaged_date
+S0001,2024-25,MCM_UG_ONCAMPUS,25000,0,0,0,2000,8000,0,3500,2000,10000,0,0,1,2024-04-15
+S0002,2024-25,MCC_UG_ONCAMPUS,5000,1,6895,750,9000,5000,1000,3500,2000,0,8000,1500,1,2024-03-20

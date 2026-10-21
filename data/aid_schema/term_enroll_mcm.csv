@@ -1,0 +1,3 @@
+student_id,term_code,institution,career,program_code,enrolled_credits,registered_date,tuition_charged,fees_charged,housing_charged,meal_charged,inst_aid_applied,fed_aid_applied,state_aid_applied,loans_disbursed_amount,balance_due,enrollment_status,award_year
+S0001,2024FA,MCM,UG,MUS-BA,15,2024-08-20,23750,1250,8000,2250,5000,2750,0,7000,8500,ENROLLED,2024-25
+S0001,2025SP,MCM,UG,MUS-BA,15,2025-01-05,23750,1250,8000,2250,5000,2750,0,3000,14000,ENROLLED,2024-25

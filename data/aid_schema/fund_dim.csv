@@ -1,0 +1,9 @@
+fund_code,fund_name,source,category,subcategory,loan_type
+INST_NEED,Institutional Need Grant,Institutional,Need,Grant,
+INST_MERIT,Institutional Merit Scholarship,Institutional,Merit,Scholarship,
+PELL,Pell Grant,Federal,Need,Grant,
+SEOG,SEOG,Federal,Need,Grant,
+LOAN_SUB,Direct Subsidized Loan,Federal,Loan,Loan,Subsidized
+LOAN_UNSUB,Direct Unsubsidized Loan,Federal,Loan,Loan,Unsubsidized
+PLUS,Parent PLUS,Federal,Loan,Loan,PLUS
+PRIVATE,Private/Alt Loan,External,Loan,Loan,Private

@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "student-persistence-model"
+abstract: "A discrete-time two-state Markov model of student enrollment persistence with Monte Carlo predictive intervals, on synthetic data."
+type: software
+version: 0.2.1
+date-released: 2026-07-14
+license: MIT
+authors:
+  - family-names: Schofield
+    given-names: John
+repository-code: "https://github.com/jp-87/student-persistence-model"
+keywords: [enrollment forecasting, student persistence, Markov chain, institutional research]

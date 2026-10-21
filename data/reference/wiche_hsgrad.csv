@@ -1,0 +1,75 @@
+# WICHE, Knocking at the College Door, 11th edition (published 2024-12).
+# Public + private ("Grand Total") high school graduates, all race/ethnicities,
+# for the nation (50 states + DC) and the Northeast region, by graduating class year.
+# Source: https://www.wiche.edu/wp-content/uploads/2024/12/Knocking-at-the-College-Door-11th-Edition-Projections-Dataset-12-11-2024.xlsx
+# (sheet "Data"; source-file md5 dbaaeb8047351c6cfbfa7db01b8bc69c). Retrieved 2026-07-03.
+# status: reported = actual; mixed = actual+projected; projected = WICHE projection.
+# Consumed by persistence.scenario: national drives the "cliff" path, northeast
+# drives the "northeast" path, per class-year entering-size factors.
+series,class_year,hs_graduates,status
+national,2009,3347948,reported
+national,2010,3421490,reported
+national,2011,3446268,reported
+national,2012,3453337,reported
+national,2013,3475016,reported
+national,2014,3497898,reported
+national,2015,3557045,reported
+national,2016,3607199,reported
+national,2017,3657868,reported
+national,2018,3732335,reported
+national,2019,3742958,reported
+national,2020,3755447,reported
+national,2021,3709547,reported
+national,2022,3752451,mixed
+national,2023,3761489,mixed
+national,2024,3763336,projected
+national,2025,3857783,projected
+national,2026,3841094,projected
+national,2027,3764007,projected
+national,2028,3688623,projected
+national,2029,3675987,projected
+national,2030,3643801,projected
+national,2031,3641127,projected
+national,2032,3665492,projected
+national,2033,3642164,projected
+national,2034,3726657,projected
+national,2035,3633730,projected
+national,2036,3565658,projected
+national,2037,3508531,projected
+national,2038,3382147,projected
+national,2039,3440434,projected
+national,2040,3443358,projected
+national,2041,3373947,projected
+northeast,2009,641902,reported
+northeast,2010,646038,reported
+northeast,2011,640631,reported
+northeast,2012,637277,reported
+northeast,2013,636325,reported
+northeast,2014,645463,reported
+northeast,2015,641043,reported
+northeast,2016,639412,reported
+northeast,2017,636465,reported
+northeast,2018,640773,reported
+northeast,2019,635246,reported
+northeast,2020,639518,reported
+northeast,2021,630607,reported
+northeast,2022,628124,mixed
+northeast,2023,621474,mixed
+northeast,2024,611665,projected
+northeast,2025,622857,projected
+northeast,2026,615670,projected
+northeast,2027,606023,projected
+northeast,2028,591042,projected
+northeast,2029,583824,projected
+northeast,2030,575812,projected
+northeast,2031,570981,projected
+northeast,2032,569111,projected
+northeast,2033,557851,projected
+northeast,2034,571019,projected
+northeast,2035,560662,projected
+northeast,2036,551786,projected
+northeast,2037,540650,projected
+northeast,2038,521342,projected
+northeast,2039,535494,projected
+northeast,2040,530362,projected
+northeast,2041,518267,projected

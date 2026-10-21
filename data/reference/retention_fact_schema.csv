@@ -1,0 +1,25 @@
+column,in_synthetic,notes
+student_id,yes,
+academic_year,no,derivable from term_code
+enrollment_status,yes,constant 'E' in synthetic; six codes upstream pre-filter
+student_program,yes,GRAD/UNDG/EXSU recoded to Graduate/Undergraduate/Non-Degree in Stage 1
+degree,yes,
+type,no,
+credits,no,billing credits in source
+cohort_session,no,derived from cohort_int trailing digit
+cohort_year,no,derivable from cohort_term
+tuition_charge,no,ntr component; synthetic carries derived ntr instead
+comp_fee,no,ntr component
+institutional_grant,yes,NA coerced to 0 in Stage 1
+region,yes,
+enrollment_type,yes,
+attendance_type,yes,
+stu_enroll_type,no,falls back to student_program when missing in Stage 1
+program_type,no,synthetic 'program' stands in
+term_code,yes,
+cohort_term,yes,imputed = term_code for Entering students missing cohort
+cohort_int,yes,legacy integer encoding; see terms.py
+term_int,yes,legacy integer encoding; see terms.py
+term_key,no,source-system join key
+term_session,no,
+school,yes,MCM/MCC; calendar rule per school in panel.py

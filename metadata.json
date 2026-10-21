@@ -1,0 +1,8 @@
+{
+  "name": "Student Persistence Model",
+  "description": "A discrete-time Markov model for student enrollment persistence, predictive intervals, and net tuition revenue forecasting under uncertainty.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
