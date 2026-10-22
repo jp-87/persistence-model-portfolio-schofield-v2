@@ -1,4 +1,0 @@
-student_id,award_year,loan_program,borrower,application_status,credit_decision,credit_decision_date,origination_amount,disbursed_amount,learning_environment,term_code
-S0001,2024-25,PLUS,Parent,Approved,APPROVED,2024-05-05,12000,10000,On-Campus,
-S0002,2024-25,PLUS,Parent,Denied,DENIED,2024-05-10,0,0,On-Campus,
-S0002,2024-25,PRIVATE,Student/Co-signer,Approved,,2024-06-01,8000,8000,On-Campus,

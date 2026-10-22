@@ -1,209 +1,972 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SiteData } from '../data/types';
+import { InteractiveSplitPanel } from './InteractiveSplitPanel';
 
 interface CohortsSectionProps {
   accent: string;
   siteData: SiteData;
 }
 
+type VintageFilter = 'all' | 'fall' | 'spring';
+type VintageChartMode = 'ntr_variance' | 'heads_compare';
+type AidViewFilter = 'tiers' | 'MCM' | 'MCC';
+
 export const CohortsSection: React.FC<CohortsSectionProps> = ({
   accent,
   siteData,
 }) => {
   const vintage = siteData.vintage;
+  const discountTiers = siteData.discount_tiers || [];
   const riskCells = siteData.risk_cells;
 
-  const money = (v: number) => '$' + (v / 1e6).toFixed(2) + 'M';
+  // Card 1 State: Entering Class Performance & NTR Drivers
+  const [vintageFilter, setVintageFilter] = useState<VintageFilter>('all');
+  const [vintageChartMode, setVintageChartMode] =
+    useState<VintageChartMode>('ntr_variance');
+  const [selectedCohortCode, setSelectedCohortCode] =
+    useState<string>('2023FA');
+
+  // Card 2 State: Retained vs. At-Risk NTR by Tuition Discount Tier
+  const [aidViewFilter, setAidViewFilter] = useState<AidViewFilter>('tiers');
+  const [selectedTierIdx, setSelectedTierIdx] = useState<number>(0);
+
+  const filteredVintage = vintage.filter((v) => {
+    if (vintageFilter === 'fall') return v.cohort.endsWith('FA');
+    if (vintageFilter === 'spring') return v.cohort.endsWith('SP');
+    return true;
+  });
+
+  const activeVintage =
+    filteredVintage.find((v) => v.cohort === selectedCohortCode) ||
+    filteredVintage[0] ||
+    vintage[0];
+
+  const totalEntrants = filteredVintage.reduce((s, v) => s + v.entrants, 0);
+  const totalActualHeads = filteredVintage.reduce(
+    (s, v) => s + Math.round(v.actual_heads),
+    0
+  );
+  const totalExpectedHeads = filteredVintage.reduce(
+    (s, v) => s + Math.round(v.expected_heads),
+    0
+  );
+  const totalRateAlphaHeads = filteredVintage.reduce(
+    (s, v) => s + v.rate_alpha_heads,
+    0
+  );
+  const totalMixAlphaHeads = filteredVintage.reduce(
+    (s, v) => s + v.mix_alpha_heads,
+    0
+  );
+  const totalAlphaNtrM = filteredVintage.reduce(
+    (s, v) => s + v.total_alpha_ntr_m,
+    0
+  );
+
+  // Build rows for Card 2 (either the 5 RStudio Tuition Discount Rate tiers, or school-filtered risk segments)
+  const tierRows =
+    aidViewFilter === 'tiers'
+      ? discountTiers
+      : riskCells
+          .filter((r) => r.school === aidViewFilter)
+          .map((r, i) => ({
+            tier_id: i + 1,
+            discount_description: r.aid_band,
+            discount_range: `${r.school} · ${r.entry_season} t+${r.duration}`,
+            school: r.school as 'MCM' | 'MCC',
+            headcount: r.headcount,
+            gross_tuition: 25660,
+            institutional_grant: Math.round(25660 + 750 - r.mean_ntr),
+            comp_fee: 750,
+            mean_ntr: r.mean_ntr,
+            discount_rate: Math.max(0, (25660 + 750 - r.mean_ntr) / 25660),
+            first_year_retention: 1 - r.exit_hazard,
+            exit_hazard: r.exit_hazard,
+            retained_ntr: Math.round(
+              r.headcount * (1 - r.exit_hazard) * r.mean_ntr
+            ),
+            ntr_at_risk: Math.round(r.ntr_at_risk),
+          }));
+
+  const safeTierIdx = Math.min(
+    Math.max(0, selectedTierIdx),
+    Math.max(0, tierRows.length - 1)
+  );
+  const activeTier = tierRows[safeTierIdx] || discountTiers[0];
+
+  const totalTierHeads = tierRows.reduce((s, r) => s + r.headcount, 0);
+  const totalRetainedNtrUsd = tierRows.reduce((s, r) => s + r.retained_ntr, 0);
+  const totalRiskNtrUsd = tierRows.reduce((s, r) => s + r.ntr_at_risk, 0);
+  const weightedExitHazard =
+    totalTierHeads > 0
+      ? tierRows.reduce((s, r) => s + r.headcount * r.exit_hazard, 0) /
+        totalTierHeads
+      : 0;
+
+  const moneyM = (v: number) => '$' + (v / 1e6).toFixed(2) + 'M';
   const signedHeads = (v: number) =>
     (v >= 0 ? '+' : '−') + Math.abs(Math.round(v)).toString();
   const signedMoneyM = (v: number) =>
     (v >= 0 ? '+$' : '−$') + Math.abs(v).toFixed(2) + 'M';
 
-  const vintageRows = vintage.map((v) => ({
-    cohort: v.cohort,
-    entrants: String(v.entrants),
-    terms: String(v.terms_scored),
-    actual: String(Math.round(v.actual_heads)),
-    expected: String(Math.round(v.expected_heads)),
-    rateAlpha: signedHeads(v.rate_alpha_heads),
-    mixAlpha: signedHeads(v.mix_alpha_heads),
-    alphaNtr: signedMoneyM(v.total_alpha_ntr_m),
-    positive: v.total_alpha_ntr_m >= 0,
-  }));
-
-  const riskRows = riskCells.map((r) => ({
-    label: `${r.school} ${r.degree} · ${r.aid_band} · ${r.entry_season} entry, t${r.duration}`,
-    heads: String(r.headcount),
-    hazard: (r.exit_hazard * 100).toFixed(1) + '%',
-    lift: r.lift.toFixed(2) + '×',
-    meanNtr: '$' + Math.round(r.mean_ntr).toLocaleString('en-US'),
-    risk: money(r.ntr_at_risk),
-  }));
+  const maxTierBarM = Math.max(
+    4,
+    Math.ceil(
+      Math.max(
+        ...tierRows.map((r) => (r.retained_ntr + r.ntr_at_risk) / 1e6)
+      ) * 1.15
+    )
+  );
 
   return (
-    <section data-section="cohorts" className="scroll-mt-24">
+    <section data-section="cohorts" className="scroll-mt-20">
       <div
-        className="text-[11px] font-bold tracking-[1.6px] uppercase"
+        className="text-[10.5px] font-bold tracking-[1.6px] uppercase"
         style={{ color: accent }}
       >
-        07, Cohorts and risk cells
+        05 · Cohort Performance &amp; Tuition Discount Tier Exposure
       </div>
 
-      <h2 className="font-serif font-normal text-[28px] md:text-[33px] leading-[1.12] tracking-[-0.4px] mt-3.5 text-[#1b1c18]">
-        Net tuition revenue at risk, by cohort and segment
+      <h2 className="font-serif font-normal text-[24px] md:text-[28px] leading-[1.15] tracking-[-0.3px] mt-1.5 text-[#1b1c18]">
+        Entering class performance and Net Tuition Revenue at risk
       </h2>
 
-      <p className="text-[14px] leading-[1.6] text-[#54564c] mt-2.5 max-w-[78ch]">
-        Institutional enrollment management tracks recent entering classes (<code className="font-mono text-[12px]">last_5_cohorts</code> in <code className="font-mono text-[12px]">ret_rates_proj</code>) and high-attrition program cells (<code className="font-mono text-[12px]">projection_code</code>). Statistically, these correspond to{' '}
-        <strong className="font-semibold text-[#1b1c18]">
-          Oaxaca-Blinder / Kitagawa cohort residual decomposition
-        </strong>{' '}
-        and{' '}
-        <strong className="font-semibold text-[#1b1c18]">
-          covariate-stratum relative hazard lift
-        </strong>.
+      <p className="text-[13.5px] leading-[1.55] text-[#54564c] mt-1.5 max-w-[68ch]">
+        Tracks whether recent entering classes are returning above or below
+        post-COVID expectations and compares <strong>Retained NTR</strong> vs.{' '}
+        <strong>First-Year NTR at Risk</strong> across the five Stage 1 RStudio
+        tuition discount tiers.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4.5 mt-6 items-start">
-        {/* Vintage alpha table */}
-        <div className="border border-[#e3e1d9] rounded-[10px] p-4.5 md:p-5.5 font-mono bg-white/70 overflow-x-auto">
-          <div className="text-[13.5px] font-bold text-[#1b1c18] font-sans mb-1">
-            Vintage alpha (cohort_term): actual headcount vs. entry-priced expectation
-          </div>
-          <div className="text-[12px] text-[#6f6d64] font-sans mb-2.5 leading-[1.45]">
-            <strong>rate α</strong> = actual − own-mix expected heads;{' '}
-            <strong>mix α</strong> = own-mix expected − prior-cohorts-average mix expected heads.{' '}
-            <strong>NTR α</strong> compares cumulative NTR against the prior-cohorts-average benchmark (so higher-discount cohorts can show +headcount α alongside −NTR α).
-          </div>
-          <div className="min-w-[460px]">
-            <div className="grid grid-cols-[64px_1fr_1fr_1fr_1fr_1fr_1.1fr] gap-1.5 text-[11px] text-[#8a887e] pb-1.5 border-b border-[#e3e1d9] font-sans">
-              <span>cohort</span>
-              <span className="text-right">entrants</span>
-              <span className="text-right">actual</span>
-              <span className="text-right">expected</span>
-              <span className="text-right">rate α</span>
-              <span className="text-right">mix α</span>
-              <span className="text-right">NTR α</span>
+      {/* INTERACTIVE CARD 1: ENTERING CLASS PERFORMANCE & NTR DRIVERS */}
+      <InteractiveSplitPanel
+        controls={
+          <>
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {(
+                [
+                  { id: 'all', label: `All Classes (${vintage.length})` },
+                  { id: 'fall', label: 'Fall Starters (4)' },
+                  { id: 'spring', label: 'Spring Starters (3)' },
+                ] as { id: VintageFilter; label: string }[]
+              ).map((f) => {
+                const on = vintageFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setVintageFilter(f.id)}
+                    className="cursor-pointer text-[12px] font-bold px-3 py-1.5 rounded-[6px] border transition-all duration-150"
+                    style={{
+                      backgroundColor: on ? accent : '#faf8f2',
+                      color: on ? '#fff' : '#44453a',
+                      borderColor: on ? accent : '#d8d6cc',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
             </div>
-            {vintageRows.map((v, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-[64px_1fr_1fr_1fr_1fr_1fr_1.1fr] gap-1.5 text-[12px] py-1.5 border-b border-[#f1efe7] last:border-none"
-              >
-                <span className="font-sans font-medium text-[#1b1c18]">
-                  {v.cohort}
-                </span>
-                <span className="text-right text-[#54564c]">{v.entrants}</span>
-                <span className="text-right text-[#54564c]">{v.actual}</span>
-                <span className="text-right text-[#54564c]">{v.expected}</span>
-                <span className="text-right text-[#54564c]">{v.rateAlpha}</span>
-                <span className="text-right text-[#54564c]">{v.mixAlpha}</span>
-                <span
-                  className="text-right font-semibold"
-                  style={{ color: v.positive ? accent : '#b06a3a' }}
-                >
-                  {v.alphaNtr}
+
+            <div className="font-serif text-[13.5px] italic text-[#54564c] leading-[1.45]">
+              Separates each entering cohort&apos;s Net Tuition Revenue variance
+              into student continuation rates (<strong>Rate Diff</strong>) and
+              tuition-discount tier composition (<strong>Mix Diff</strong>).
+            </div>
+          </>
+        }
+        kpiStrip={
+          <>
+            <div>
+              <div className="text-[10.5px] text-[#6f6d64] font-bold uppercase tracking-[0.5px]">
+                Actual vs. Expected Terms
+              </div>
+              <div className="text-[22px] font-extrabold tracking-tight text-[#1b1c18] mt-0.5 leading-none font-mono tabular-nums">
+                {totalActualHeads.toLocaleString('en-US')}
+                <span className="text-[12px] font-normal text-[#8a887e] ml-1">
+                  / {totalExpectedHeads.toLocaleString('en-US')} exp
                 </span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Top risk cells table */}
-        <div className="border border-[#e3e1d9] rounded-[10px] p-4.5 md:p-5.5 font-mono bg-white/70 overflow-x-auto">
-          <div className="text-[13.5px] font-bold text-[#1b1c18] font-sans mb-1">
-            Top risk cells (projection_code × entry term × duration) by NTR at risk
-          </div>
-          <div className="text-[12px] text-[#6f6d64] font-sans mb-2.5 leading-[1.45]">
-            Ranked by <code>headcount × exit_hazard × mean_ntr</code>;{' '}
-            <strong>hazard lift λ</strong> compares cell exit rate to the school-wide baseline hazard.
-          </div>
-          <div className="min-w-[480px]">
-            <div className="grid grid-cols-[1.7fr_0.7fr_0.8fr_0.7fr_0.9fr] gap-1.5 text-[11px] text-[#8a887e] pb-1.5 border-b border-[#e3e1d9] font-sans">
-              <span>segment</span>
-              <span className="text-right">heads</span>
-              <span className="text-right">exit hazard</span>
-              <span className="text-right">lift</span>
-              <span className="text-right">NTR at risk</span>
-            </div>
-            {riskRows.map((r, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-[1.7fr_0.7fr_0.8fr_0.7fr_0.9fr] gap-1.5 text-[12px] py-1.5 border-b border-[#f1efe7] last:border-none"
-              >
-                <span
-                  className="font-sans text-[11.5px] text-[#1b1c18] truncate"
-                  title={`${r.label} (mean NTR ${r.meanNtr})`}
-                >
-                  {r.label}
-                </span>
-                <span className="text-right text-[#54564c]">{r.heads}</span>
-                <span className="text-right text-[#54564c]">{r.hazard}</span>
-                <span className="text-right text-[#b06a3a] font-semibold">
-                  {r.lift}
-                </span>
-                <span className="text-right font-semibold text-[#1b1c18]">
-                  {r.risk}
-                </span>
+              <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
+                Net difference:{' '}
+                {signedHeads(totalActualHeads - totalExpectedHeads)} terms
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+            </div>
 
-      {/* Figures */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4.5 mt-4.5">
-        <div className="border border-[#e3e1d9] rounded-[10px] p-3.5 md:p-4 bg-white/70">
-          <div className="text-[13.5px] font-bold text-[#1b1c18] mb-2">
-            Revenue lost to exits, by term
+            <div>
+              <div className="text-[10.5px] text-[#6f6d64] font-bold uppercase tracking-[0.5px]">
+                Cumulative NTR Variance
+              </div>
+              <div
+                className="text-[22px] font-extrabold tracking-tight mt-0.5 leading-none font-mono tabular-nums"
+                style={{
+                  color: totalAlphaNtrM >= 0 ? accent : '#b06a3a',
+                }}
+              >
+                {signedMoneyM(totalAlphaNtrM)}
+              </div>
+              <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
+                Across {filteredVintage.length} post-COVID entering classes
+              </div>
+            </div>
+          </>
+        }
+        summaryTable={
+          <>
+            <div className="flex items-center justify-between text-[10.5px] font-sans text-[#6f6d64] mb-1.5">
+              <span className="font-bold uppercase tracking-[0.5px]">
+                Entering Class Performance (Click row to inspect)
+              </span>
+              <span>Actual vs. Post-COVID Benchmark</span>
+            </div>
+            <div className="grid grid-cols-[52px_0.75fr_0.9fr_0.9fr_0.85fr_0.85fr_1fr] gap-1 text-[#8a887e] font-sans font-bold text-[10.5px] pb-1 border-b border-[#e3e1d9]">
+              <span>Class</span>
+              <span className="text-right">Start</span>
+              <span className="text-right">Actual</span>
+              <span className="text-right">Exp</span>
+              <span className="text-right">Rate</span>
+              <span className="text-right">Mix</span>
+              <span className="text-right">NTR Diff</span>
+            </div>
+            {filteredVintage.map((v) => {
+              const isSelected = activeVintage?.cohort === v.cohort;
+              const pos = v.total_alpha_ntr_m >= 0;
+              return (
+                <button
+                  key={v.cohort}
+                  type="button"
+                  onClick={() => setSelectedCohortCode(v.cohort)}
+                  onMouseEnter={() => setSelectedCohortCode(v.cohort)}
+                  className="w-full text-left grid grid-cols-[52px_0.75fr_0.9fr_0.9fr_0.85fr_0.85fr_1fr] gap-1 py-1.5 px-1.5 rounded-[4px] border-b border-[#f4f2ea] transition-colors cursor-pointer"
+                  style={{
+                    backgroundColor: isSelected
+                      ? `color-mix(in srgb, ${accent} 10%, #fff)`
+                      : 'transparent',
+                  }}
+                >
+                  <span
+                    className="font-sans font-bold"
+                    style={{ color: isSelected ? accent : '#1b1c18' }}
+                  >
+                    {v.cohort}
+                  </span>
+                  <span className="text-right text-[#54564c]">
+                    {v.entrants.toLocaleString('en-US')}
+                  </span>
+                  <span className="text-right font-semibold text-[#1b1c18]">
+                    {Math.round(v.actual_heads).toLocaleString('en-US')}
+                  </span>
+                  <span className="text-right text-[#6f6d64]">
+                    {Math.round(v.expected_heads).toLocaleString('en-US')}
+                  </span>
+                  <span className="text-right text-[#54564c]">
+                    {signedHeads(v.rate_alpha_heads)}
+                  </span>
+                  <span className="text-right text-[#6f6d64]">
+                    {signedHeads(v.mix_alpha_heads)}
+                  </span>
+                  <span
+                    className="text-right font-bold"
+                    style={{ color: pos ? accent : '#b06a3a' }}
+                  >
+                    {signedMoneyM(v.total_alpha_ntr_m)}
+                  </span>
+                </button>
+              );
+            })}
+            {/* Total Row */}
+            <div className="grid grid-cols-[52px_0.75fr_0.9fr_0.9fr_0.85fr_0.85fr_1fr] gap-1 py-1.5 px-1.5 border-t border-[#d5d2c6] font-bold text-[#1b1c18] bg-[#faf8f2]/80">
+              <span className="font-sans">Total</span>
+              <span className="text-right text-[#6f6d64]">
+                {totalEntrants.toLocaleString('en-US')}
+              </span>
+              <span className="text-right">
+                {totalActualHeads.toLocaleString('en-US')}
+              </span>
+              <span className="text-right text-[#6f6d64]">
+                {totalExpectedHeads.toLocaleString('en-US')}
+              </span>
+              <span className="text-right text-[#54564c]">
+                {signedHeads(totalRateAlphaHeads)}
+              </span>
+              <span className="text-right text-[#6f6d64]">
+                {signedHeads(totalMixAlphaHeads)}
+              </span>
+              <span
+                className="text-right"
+                style={{ color: totalAlphaNtrM >= 0 ? accent : '#b06a3a' }}
+              >
+                {signedMoneyM(totalAlphaNtrM)}
+              </span>
+            </div>
+          </>
+        }
+        chartTitle={
+          vintageChartMode === 'ntr_variance'
+            ? 'Drivers of Net Tuition Revenue Variance by Class ($M)'
+            : 'Actual vs. Expected Student-Terms by Entering Class'
+        }
+        chartHeaderRight={
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setVintageChartMode('ntr_variance')}
+              className="cursor-pointer font-sans text-[10.5px] font-bold px-2 py-0.5 rounded border transition-colors"
+              style={{
+                backgroundColor:
+                  vintageChartMode === 'ntr_variance' ? accent : '#faf8f2',
+                color:
+                  vintageChartMode === 'ntr_variance' ? '#fff' : '#54564c',
+                borderColor:
+                  vintageChartMode === 'ntr_variance' ? accent : '#d8d6cc',
+              }}
+            >
+              NTR Variance ($M)
+            </button>
+            <button
+              type="button"
+              onClick={() => setVintageChartMode('heads_compare')}
+              className="cursor-pointer font-sans text-[10.5px] font-bold px-2 py-0.5 rounded border transition-colors"
+              style={{
+                backgroundColor:
+                  vintageChartMode === 'heads_compare' ? accent : '#faf8f2',
+                color:
+                  vintageChartMode === 'heads_compare' ? '#fff' : '#54564c',
+                borderColor:
+                  vintageChartMode === 'heads_compare' ? accent : '#d8d6cc',
+              }}
+            >
+              Actual vs. Expected
+            </button>
           </div>
-          <div className="overflow-hidden rounded-[4px] bg-[#f2eee3] border border-[#eae6db]">
-            <img
-              src="figures/churn.png"
-              alt="Revenue lost to exits per term, with cumulative total"
-              className="w-full h-auto block"
+        }
+        svgChart={
+          vintageChartMode === 'ntr_variance' ? (
+            <svg
+              viewBox="0 0 420 240"
+              className="w-full h-auto select-none"
+              role="img"
+              aria-label="Net Tuition Revenue variance by entering class"
+            >
+              <g stroke="#ecebe3" strokeWidth="1">
+                <line x1="48" y1="36" x2="404" y2="36" />
+                <line x1="48" y1="76" x2="404" y2="76" />
+                <line x1="48" y1="156" x2="404" y2="156" />
+                <line x1="48" y1="196" x2="404" y2="196" />
+              </g>
+              <line
+                x1="48"
+                y1="20"
+                x2="48"
+                y2="196"
+                stroke="#cdcbc1"
+                strokeWidth="1.1"
+              />
+              <line
+                x1="48"
+                y1="116"
+                x2="404"
+                y2="116"
+                stroke="#1b1c18"
+                strokeWidth="1.2"
+              />
+
+              <g
+                fill="#8a887e"
+                fontFamily="Open Sans, sans-serif"
+                fontSize="10.5"
+                textAnchor="end"
+              >
+                <text x="42" y="40">
+                  +$4.2M
+                </text>
+                <text x="42" y="80">
+                  +$2.1M
+                </text>
+                <text x="42" y="120">
+                  $0.0M
+                </text>
+                <text x="42" y="160">
+                  −$2.1M
+                </text>
+                <text x="42" y="200">
+                  −$4.2M
+                </text>
+              </g>
+
+              {filteredVintage.map((v, idx) => {
+                const count = Math.max(1, filteredVintage.length);
+                const slotW = 344 / count;
+                const barW = Math.min(34, slotW * 0.62);
+                const xCenter = 56 + idx * slotW + slotW / 2;
+                const xLeft = xCenter - barW / 2;
+                const isSel = activeVintage?.cohort === v.cohort;
+                const val = v.total_alpha_ntr_m;
+                const pos = val >= 0;
+                const barH = Math.min(78, (Math.abs(val) / 4.2) * 80);
+                const yTop = pos ? 116 - barH : 116;
+
+                return (
+                  <g
+                    key={v.cohort}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedCohortCode(v.cohort)}
+                    onMouseEnter={() => setSelectedCohortCode(v.cohort)}
+                  >
+                    {isSel && (
+                      <rect
+                        x={xLeft - 5}
+                        y="24"
+                        width={barW + 10}
+                        height="172"
+                        rx="4"
+                        fill={pos ? accent : '#b06a3a'}
+                        opacity="0.08"
+                      />
+                    )}
+                    <rect
+                      x={xLeft}
+                      y={yTop}
+                      width={barW}
+                      height={Math.max(2, barH)}
+                      rx="2"
+                      fill={pos ? accent : '#b06a3a'}
+                      opacity={isSel ? 1 : 0.78}
+                    />
+                    <text
+                      x={xCenter}
+                      y={
+                        pos
+                          ? Math.max(16, yTop - 5)
+                          : Math.min(206, yTop + barH + 11)
+                      }
+                      textAnchor="middle"
+                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                      fontSize="9.5"
+                      fontWeight={isSel ? '700' : '600'}
+                      fill={pos ? accent : '#b06a3a'}
+                    >
+                      {val >= 0 ? `+${val.toFixed(2)}` : val.toFixed(2)}
+                    </text>
+                    <text
+                      x={xCenter}
+                      y="218"
+                      textAnchor="middle"
+                      fontFamily="Open Sans, sans-serif"
+                      fontSize="10"
+                      fontWeight={isSel ? '700' : '400'}
+                      fill={isSel ? '#1b1c18' : '#8a887e'}
+                    >
+                      {v.cohort}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          ) : (
+            <svg
+              viewBox="0 0 420 240"
+              className="w-full h-auto select-none"
+              role="img"
+              aria-label="Actual versus expected student-terms by entering class"
+            >
+              <g stroke="#ecebe3" strokeWidth="1">
+                <line x1="48" y1="34" x2="404" y2="34" />
+                <line x1="48" y1="115" x2="404" y2="115" />
+                <line x1="48" y1="196" x2="404" y2="196" />
+              </g>
+              <line
+                x1="48"
+                y1="20"
+                x2="48"
+                y2="196"
+                stroke="#cdcbc1"
+                strokeWidth="1.1"
+              />
+              <line
+                x1="48"
+                y1="196"
+                x2="404"
+                y2="196"
+                stroke="#cdcbc1"
+                strokeWidth="1.1"
+              />
+              <g
+                fill="#8a887e"
+                fontFamily="Open Sans, sans-serif"
+                fontSize="10.5"
+                textAnchor="end"
+              >
+                <text x="42" y="38">
+                  7,600
+                </text>
+                <text x="42" y="119">
+                  3,800
+                </text>
+                <text x="42" y="200">
+                  0
+                </text>
+              </g>
+
+              {filteredVintage.map((v, idx) => {
+                const count = Math.max(1, filteredVintage.length);
+                const slotW = 344 / count;
+                const pairW = Math.min(34, slotW * 0.68);
+                const halfW = pairW / 2 - 1;
+                const xCenter = 56 + idx * slotW + slotW / 2;
+                const isSel = activeVintage?.cohort === v.cohort;
+
+                const hAct = (v.actual_heads / 7600) * 162;
+                const hExp = (v.expected_heads / 7600) * 162;
+
+                return (
+                  <g
+                    key={v.cohort}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedCohortCode(v.cohort)}
+                    onMouseEnter={() => setSelectedCohortCode(v.cohort)}
+                  >
+                    {isSel && (
+                      <rect
+                        x={xCenter - pairW / 2 - 4}
+                        y="24"
+                        width={pairW + 8}
+                        height="172"
+                        rx="4"
+                        fill={accent}
+                        opacity="0.07"
+                      />
+                    )}
+                    <rect
+                      x={xCenter - pairW / 2}
+                      y={196 - hExp}
+                      width={halfW}
+                      height={Math.max(2, hExp)}
+                      fill="#c8c6bc"
+                    />
+                    <rect
+                      x={xCenter + 1}
+                      y={196 - hAct}
+                      width={halfW}
+                      height={Math.max(2, hAct)}
+                      fill={v.total_alpha_ntr_m >= 0 ? accent : '#b06a3a'}
+                    />
+                    <text
+                      x={xCenter}
+                      y="218"
+                      textAnchor="middle"
+                      fontFamily="Open Sans, sans-serif"
+                      fontSize="10"
+                      fontWeight={isSel ? '700' : '400'}
+                      fill={isSel ? '#1b1c18' : '#8a887e'}
+                    >
+                      {v.cohort}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          )
+        }
+        chartLegend={
+          <>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="w-3 h-3 rounded-[2px] inline-block"
+                style={{ backgroundColor: accent }}
+              />
+              Above benchmark (+NTR)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-[2px] bg-[#b06a3a] inline-block" />
+              Below benchmark (−NTR)
+            </span>
+          </>
+        }
+        chartFooterRight={
+          activeVintage ? (
+            <>
+              <strong>{activeVintage.cohort}</strong> (
+              {activeVintage.terms_scored} terms): Rate{' '}
+              {signedHeads(activeVintage.rate_alpha_heads)} · Mix{' '}
+              {signedHeads(activeVintage.mix_alpha_heads)} →{' '}
+              <strong
+                style={{
+                  color:
+                    activeVintage.total_alpha_ntr_m >= 0 ? accent : '#b06a3a',
+                }}
+              >
+                {signedMoneyM(activeVintage.total_alpha_ntr_m)}
+              </strong>
+            </>
+          ) : undefined
+        }
+      />
+
+      {/* INTERACTIVE CARD 2: RETAINED VS. AT-RISK NTR BY TUITION DISCOUNT TIER */}
+      <InteractiveSplitPanel
+        className="mt-4"
+        controls={
+          <>
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {(
+                [
+                  {
+                    id: 'tiers',
+                    label: '5 Tuition Discount Tiers (Stage 1 RStudio)',
+                  },
+                  { id: 'MCM', label: 'MCM · Millbury College of Music' },
+                  { id: 'MCC', label: 'MCC · Millbury College Conservatory' },
+                ] as { id: AidViewFilter; label: string }[]
+              ).map((f) => {
+                const on = aidViewFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => {
+                      setAidViewFilter(f.id);
+                      setSelectedTierIdx(0);
+                    }}
+                    className="cursor-pointer text-[12px] font-bold px-3 py-1.5 rounded-[6px] border transition-all duration-150"
+                    style={{
+                      backgroundColor: on ? accent : '#faf8f2',
+                      color: on ? '#fff' : '#44453a',
+                      borderColor: on ? accent : '#d8d6cc',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="font-serif text-[13.5px] italic text-[#54564c] leading-[1.45]">
+              Compares <strong>Retained NTR</strong> (returning students × NTR /
+              student) against <strong>First-Year NTR at Risk</strong> (departing
+              students × NTR / student) across tuition discount tiers.
+            </div>
+          </>
+        }
+        kpiStrip={
+          <>
+            <div>
+              <div className="text-[10.5px] text-[#6f6d64] font-bold uppercase tracking-[0.5px]">
+                Retained Next-Year NTR
+              </div>
+              <div
+                className="text-[22px] font-extrabold tracking-tight mt-0.5 leading-none font-mono tabular-nums"
+                style={{ color: accent }}
+              >
+                {moneyM(totalRetainedNtrUsd)}
+              </div>
+              <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
+                {totalTierHeads.toLocaleString('en-US')} students ·{' '}
+                {((1 - weightedExitHazard) * 100).toFixed(1)}% retained
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10.5px] text-[#6f6d64] font-bold uppercase tracking-[0.5px]">
+                First-Year NTR at Risk
+              </div>
+              <div className="text-[22px] font-extrabold tracking-tight mt-0.5 leading-none font-mono tabular-nums text-[#b06a3a]">
+                {moneyM(totalRiskNtrUsd)}
+              </div>
+              <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
+                Mean attrition rate: {(weightedExitHazard * 100).toFixed(1)}%
+              </div>
+            </div>
+          </>
+        }
+        summaryTable={
+          <>
+            <div className="flex items-center justify-between text-[10.5px] font-sans text-[#6f6d64] mb-1.5">
+              <span className="font-bold uppercase tracking-[0.5px]">
+                Tuition Discount Tiers (Click row to inspect)
+              </span>
+              <span>Retained vs. At-Risk NTR</span>
+            </div>
+            <div className="grid grid-cols-[1.4fr_0.65fr_0.75fr_0.85fr_0.9fr_0.85fr] gap-1 text-[#8a887e] font-sans font-bold text-[10.5px] pb-1 border-b border-[#e3e1d9]">
+              <span>Discount Tier</span>
+              <span className="text-right">Heads</span>
+              <span className="text-right">Leave %</span>
+              <span className="text-right">NTR/St</span>
+              <span className="text-right">Retained</span>
+              <span className="text-right">At Risk</span>
+            </div>
+            {tierRows.map((r, idx) => {
+              const isSelected = idx === safeTierIdx;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedTierIdx(idx)}
+                  onMouseEnter={() => setSelectedTierIdx(idx)}
+                  className="w-full text-left grid grid-cols-[1.4fr_0.65fr_0.75fr_0.85fr_0.9fr_0.85fr] gap-1 py-1.5 px-1.5 rounded-[4px] border-b border-[#f4f2ea] transition-colors cursor-pointer"
+                  style={{
+                    backgroundColor: isSelected
+                      ? `color-mix(in srgb, ${accent} 10%, #fff)`
+                      : 'transparent',
+                  }}
+                >
+                  <span
+                    className="font-sans text-[11px] font-semibold truncate"
+                    style={{ color: isSelected ? accent : '#1b1c18' }}
+                    title={`${r.discount_description} (${r.discount_range})`}
+                  >
+                    {r.discount_description}{' '}
+                    <span className="text-[#8a887e] font-normal">
+                      ({r.discount_range})
+                    </span>
+                  </span>
+                  <span className="text-right text-[#54564c]">
+                    {r.headcount}
+                  </span>
+                  <span className="text-right text-[#b06a3a] font-semibold">
+                    {(r.exit_hazard * 100).toFixed(1)}%
+                  </span>
+                  <span className="text-right text-[#6f6d64]">
+                    ${Math.round(r.mean_ntr).toLocaleString('en-US')}
+                  </span>
+                  <span
+                    className="text-right font-semibold"
+                    style={{ color: accent }}
+                  >
+                    {moneyM(r.retained_ntr)}
+                  </span>
+                  <span className="text-right font-bold text-[#b06a3a]">
+                    {moneyM(r.ntr_at_risk)}
+                  </span>
+                </button>
+              );
+            })}
+            {/* Total Row */}
+            <div className="grid grid-cols-[1.4fr_0.65fr_0.75fr_0.85fr_0.9fr_0.85fr] gap-1 py-1.5 px-1.5 border-t border-[#d5d2c6] font-bold text-[#1b1c18] bg-[#faf8f2]/80">
+              <span className="font-sans">
+                Total ({tierRows.length} tiers)
+              </span>
+              <span className="text-right">
+                {totalTierHeads.toLocaleString('en-US')}
+              </span>
+              <span className="text-right text-[#b06a3a]">
+                {(weightedExitHazard * 100).toFixed(1)}%
+              </span>
+              <span className="text-right text-[#6f6d64]">—</span>
+              <span className="text-right" style={{ color: accent }}>
+                {moneyM(totalRetainedNtrUsd)}
+              </span>
+              <span className="text-right text-[#b06a3a]">
+                {moneyM(totalRiskNtrUsd)}
+              </span>
+            </div>
+          </>
+        }
+        chartTitle="Retained NTR vs. First-Year NTR at Risk by Tuition Discount Tier ($M)"
+        chartHeaderRight={
+          activeTier ? (
+            <>
+              <strong className="text-[#1b1c18]">
+                {activeTier.discount_description}:
+              </strong>{' '}
+              <span style={{ color: accent }}>
+                {moneyM(activeTier.retained_ntr)} retained
+              </span>{' '}
+              vs.{' '}
+              <strong className="text-[#b06a3a]">
+                {moneyM(activeTier.ntr_at_risk)} at risk
+              </strong>
+            </>
+          ) : undefined
+        }
+        svgChart={
+          <svg
+            viewBox="0 0 420 240"
+            className="w-full h-auto select-none"
+            role="img"
+            aria-label="Stacked bar chart comparing Retained Net Tuition Revenue versus Net Tuition Revenue at risk by financial aid discount tier"
+          >
+            {/* Grid lines */}
+            <g stroke="#ecebe3" strokeWidth="1">
+              <line x1="48" y1="34" x2="404" y2="34" />
+              <line x1="48" y1="88" x2="404" y2="88" />
+              <line x1="48" y1="142" x2="404" y2="142" />
+              <line x1="48" y1="196" x2="404" y2="196" />
+            </g>
+
+            {/* Axes */}
+            <line
+              x1="48"
+              y1="20"
+              x2="48"
+              y2="196"
+              stroke="#cdcbc1"
+              strokeWidth="1.1"
             />
-          </div>
-        </div>
-
-        <div className="border border-[#e3e1d9] rounded-[10px] p-3.5 md:p-4 bg-white/70">
-          <div className="text-[13.5px] font-bold text-[#1b1c18] mb-2">
-            What drives the change
-          </div>
-          <div className="overflow-hidden rounded-[4px] bg-[#f2eee3] border border-[#eae6db]">
-            <img
-              src="figures/drivers.png"
-              alt="Driver decomposition of the revenue change"
-              className="w-full h-auto block"
+            <line
+              x1="48"
+              y1="196"
+              x2="404"
+              y2="196"
+              stroke="#cdcbc1"
+              strokeWidth="1.1"
             />
-          </div>
-        </div>
-      </div>
 
-      <div className="text-[12.5px] text-[#6f6d64] mt-3 leading-[1.55] max-w-[54em]">
-        Both tables are computed on the 54,954-record synthetic panel. While the
-        generator plants no true cohort trend, early scored cohorts (such as{' '}
-        <code className="font-mono">2022SP</code>,{' '}
-        <code className="font-mono">terms_scored = 8</code>,{' '}
-        <code className="font-mono">rate α = +100</code>) exhibit positive rate
-        alpha because deep durations beyond their entry-time observation
-        frontier (<code className="font-mono">priced_through</code>) default
-        conservatively to zero, whereas later cohorts (<code className="font-mono">2022FA–2024SP</code>) reflect small Binomial process noise.
-      </div>
+            {/* Left Y-axis labels */}
+            <g
+              fill="#8a887e"
+              fontFamily="Open Sans, sans-serif"
+              fontSize="10"
+              textAnchor="end"
+            >
+              <text x="42" y="38">
+                ${maxTierBarM}M
+              </text>
+              <text x="42" y="118">
+                ${(maxTierBarM / 2).toFixed(1)}M
+              </text>
+              <text x="42" y="200">
+                $0M
+              </text>
+            </g>
 
-      <div className="border border-[#e3e1d9] rounded-[10px] p-4 md:p-5 mt-4.5 max-w-[46em] bg-white/70">
-        <div className="text-[13.5px] font-bold text-[#1b1c18]">
-          Production lineage
-        </div>
-        <div className="text-[13.5px] leading-[1.6] text-[#44453a] mt-1.5">
-          This is a rebuild from scratch on synthetic data. It follows the R,
-          Python, and SQL persistence and net-tuition-revenue forecasting work I
-          did as Assistant Director of Enrollment Research &amp; Analytics at a
-          two-school institution (2023–2025), run against that
-          institution&apos;s records. That pipeline and its data are private and
-          are not published here; no figure on this page comes from them.
+            {tierRows.map((r, idx) => {
+              const count = Math.max(1, tierRows.length);
+              const slotW = 348 / count;
+              const barW = Math.min(44, slotW * 0.62);
+              const xCenter = 54 + idx * slotW + slotW / 2;
+              const xLeft = xCenter - barW / 2;
+              const isSel = idx === safeTierIdx;
+
+              const retM = r.retained_ntr / 1e6;
+              const riskM = r.ntr_at_risk / 1e6;
+
+              const hRet = (retM / maxTierBarM) * 162;
+              const hRisk = (riskM / maxTierBarM) * 162;
+              const yRet = 196 - hRet;
+              const yRisk = yRet - hRisk;
+
+              return (
+                <g
+                  key={idx}
+                  className="cursor-pointer"
+                  onClick={() => setSelectedTierIdx(idx)}
+                  onMouseEnter={() => setSelectedTierIdx(idx)}
+                >
+                  {isSel && (
+                    <rect
+                      x={xLeft - 6}
+                      y="24"
+                      width={barW + 12}
+                      height="172"
+                      rx="4"
+                      fill={accent}
+                      opacity="0.08"
+                    />
+                  )}
+
+                  {/* Retained NTR bottom bar */}
+                  <rect
+                    x={xLeft}
+                    y={yRet}
+                    width={barW}
+                    height={Math.max(2, hRet)}
+                    fill={accent}
+                    opacity={isSel ? 0.95 : 0.78}
+                  />
+
+                  {/* NTR at Risk top cap */}
+                  <rect
+                    x={xLeft}
+                    y={yRisk}
+                    width={barW}
+                    height={Math.max(2, hRisk)}
+                    fill="#b06a3a"
+                    opacity={isSel ? 1 : 0.85}
+                  />
+
+                  {/* Risk label above bar */}
+                  <text
+                    x={xCenter}
+                    y={Math.max(16, yRisk - 5)}
+                    textAnchor="middle"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontSize="9.5"
+                    fontWeight={isSel ? '700' : '600'}
+                    fill="#b06a3a"
+                  >
+                    −${riskM.toFixed(2)}M
+                  </text>
+
+                  {/* Tier label on X axis */}
+                  <text
+                    x={xCenter}
+                    y="213"
+                    textAnchor="middle"
+                    fontFamily="Open Sans, sans-serif"
+                    fontSize="9.5"
+                    fontWeight={isSel ? '700' : '400'}
+                    fill={isSel ? '#1b1c18' : '#8a887e'}
+                  >
+                    {r.discount_description.split(' ')[0]}
+                  </text>
+                  <text
+                    x={xCenter}
+                    y="225"
+                    textAnchor="middle"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontSize="9"
+                    fill="#6f6d64"
+                  >
+                    {(r.first_year_retention * 100).toFixed(0)}% ret
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        }
+        chartLegend={
+          <>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="w-3 h-3 rounded-[2px] inline-block"
+                style={{ backgroundColor: accent }}
+              />
+              Retained NTR ($M)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-[2px] bg-[#b06a3a] inline-block" />
+              First-Year NTR at Risk ($M)
+            </span>
+          </>
+        }
+        chartFooterRight={
+          activeTier ? (
+            <>
+              {activeTier.discount_description}:{' '}
+              <strong>
+                {(activeTier.first_year_retention * 100).toFixed(1)}%
+              </strong>{' '}
+              retained ·{' '}
+              <strong className="text-[#b06a3a]">
+                {(activeTier.exit_hazard * 100).toFixed(1)}%
+              </strong>{' '}
+              at risk
+            </>
+          ) : undefined
+        }
+      />
+
+      <div className="border border-[#e3e1d9] rounded-[10px] p-3.5 md:p-4 mt-3.5 bg-white/75 flex flex-wrap items-center justify-between gap-2 text-[12px] text-[#44453a]">
+        <div>
+          <strong className="text-[#1b1c18]">Portfolio Note:</strong> Clean-room
+          synthetic implementation of the two-stage RStudio and Positron IDE
+          enrollment and Net Tuition Revenue forecasting pipeline built by John
+          Schofield (2023–2025).
         </div>
       </div>
     </section>
   );
 };
+

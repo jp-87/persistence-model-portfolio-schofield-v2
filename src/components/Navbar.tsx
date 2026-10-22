@@ -5,8 +5,7 @@ interface NavbarProps {
   paper: string;
   repoUrl?: string;
   published?: boolean;
-  activeView?: 'portfolio' | 'report' | 'diagnostics';
-  onSelectView?: (view: 'portfolio' | 'report' | 'diagnostics') => void;
+  onNavigate?: (sectionId: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -14,9 +13,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   paper,
   repoUrl = 'https://github.com/jp-87/student-persistence-model',
   published = true,
-  activeView = 'portfolio',
-  onSelectView,
+  onNavigate,
 }) => {
+  const navLinks = [
+    { id: 'scenarios', label: '2030 Fall NTR' },
+    { id: 'inspector', label: 'Cohort Inspector' },
+    { id: 'calc', label: '4-Year NTR Calculator' },
+    { id: 'method', label: 'Terminology Guide' },
+    { id: 'cohorts', label: 'Standing Report' },
+  ];
+
   return (
     <header
       className="sticky top-0 z-40 backdrop-blur-md border-b border-[#e6e4dc] transition-colors"
@@ -24,14 +30,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         backgroundColor: `color-mix(in srgb, ${paper} 92%, transparent)`,
       }}
     >
-      <div className="max-w-[1200px] mx-auto px-6 md:px-10 py-3.5 flex items-center justify-between gap-8">
+      <div className="max-w-[1200px] mx-auto px-6 md:px-10 py-3 flex items-center justify-between gap-8">
         {/* Zone 1: Single-line Brand Wordmark */}
         <a
           href="#overview"
           onClick={(e) => {
-            if (onSelectView && activeView !== 'portfolio') {
+            if (onNavigate) {
               e.preventDefault();
-              onSelectView('portfolio');
+              onNavigate('overview');
             }
           }}
           className="inline-flex items-center gap-2.5 font-serif text-[17px] font-medium tracking-tight text-[#1b1c18] whitespace-nowrap shrink-0 no-underline hover:text-[#0d4f30] transition-colors"
@@ -42,53 +48,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="w-7 h-7 rounded-[6px] object-cover border border-[#1b1c18]/15 shrink-0"
           />
           <span>
-            John Schofield <span className="text-[#8c8a7e] font-sans font-normal mx-1.5">|</span> Student Persistence Model
+            John Schofield{' '}
+            <span className="text-[#8c8a7e] font-sans font-normal mx-1.5">
+              |
+            </span>{' '}
+            Student Persistence Model
           </span>
         </a>
 
         {/* Zone 2: Clean Single-Line Navigation Links */}
-        {onSelectView && (
-          <nav
-            aria-label="Primary view navigation"
-            className="flex items-center gap-6 text-[13px] font-semibold"
-          >
+        <nav
+          aria-label="Primary navigation"
+          className="hidden md:flex items-center gap-5 text-[12.5px] font-semibold text-[#54564c]"
+        >
+          {navLinks.map((link) => (
             <button
+              key={link.id}
               type="button"
-              onClick={() => onSelectView('portfolio')}
-              className="cursor-pointer py-1 bg-transparent border-b-2 transition-colors whitespace-nowrap shrink-0"
-              style={{
-                borderColor:
-                  activeView === 'portfolio' ? accent : 'transparent',
-                color: activeView === 'portfolio' ? accent : '#54564c',
-              }}
+              onClick={() => onNavigate && onNavigate(link.id)}
+              className="cursor-pointer py-1 bg-transparent border-none text-[#54564c] hover:text-[#1b1c18] transition-colors whitespace-nowrap shrink-0"
             >
-              Portfolio Case Study
+              {link.label}
             </button>
-            <button
-              type="button"
-              onClick={() => onSelectView('report')}
-              className="cursor-pointer py-1 bg-transparent border-b-2 transition-colors whitespace-nowrap shrink-0"
-              style={{
-                borderColor: activeView === 'report' ? accent : 'transparent',
-                color: activeView === 'report' ? accent : '#54564c',
-              }}
-            >
-              Standing Report
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelectView('diagnostics')}
-              className="cursor-pointer py-1 bg-transparent border-b-2 transition-colors whitespace-nowrap shrink-0"
-              style={{
-                borderColor:
-                  activeView === 'diagnostics' ? accent : 'transparent',
-                color: activeView === 'diagnostics' ? accent : '#54564c',
-              }}
-            >
-              Model Diagnostics
-            </button>
-          </nav>
-        )}
+          ))}
+        </nav>
 
         {/* Zone 3: Single Primary Action */}
         <div className="flex items-center shrink-0">

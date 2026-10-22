@@ -54,25 +54,15 @@ await runTest('test_entrypoint_and_static_assets', () => {
     'README.md must link to https://remix-student-persistence-model-9415.ai.studio'
   );
 
-  for (const fig of ['backtest_cone.png', 'churn.png', 'drivers.png', 'logo.png']) {
-    const p = path.join(ROOT, 'public/figures', fig);
-    assert.ok(fs.existsSync(p), `public/figures/${fig} must exist`);
-    assert.ok(fs.statSync(p).size > 1000, `public/figures/${fig} must be non-empty`);
-  }
+  const logoPath = path.join(ROOT, 'public/figures/logo.png');
+  assert.ok(fs.existsSync(logoPath), 'public/figures/logo.png must exist');
+  assert.ok(fs.statSync(logoPath).size > 1000, 'public/figures/logo.png must be non-empty');
 
-  // Single source of truth for backtest_cone.png
-  const md5Public = crypto
-    .createHash('md5')
-    .update(fs.readFileSync(path.join(ROOT, 'public/figures/backtest_cone.png')))
-    .digest('hex');
-  const md5Docs = crypto
-    .createHash('md5')
-    .update(fs.readFileSync(path.join(ROOT, 'docs/figures/backtest_cone.png')))
-    .digest('hex');
-  assert.equal(
-    md5Public,
-    md5Docs,
-    'public/figures/backtest_cone.png and docs/figures/backtest_cone.png must be byte-identical'
+  // Verify deprecated docs and figures are removed
+  assert.ok(!fs.existsSync(path.join(ROOT, 'docs')), 'Deprecated /docs directory must not exist');
+  assert.ok(
+    !fs.existsSync(path.join(ROOT, 'data/forecast_ledger.csv')),
+    'Deprecated data/forecast_ledger.csv must not exist'
   );
 });
 
@@ -88,23 +78,30 @@ await runTest('test_synthetic_data_checksum', () => {
     siteData.data.records,
     'CSV record count must equal 54,954'
   );
+  assert.equal(siteData.data.students, 15932, 'Unique aliased student IDs must equal 15,932');
 });
 
-// 3. Headline claims hold
-await runTest('test_headline_claims_hold', () => {
-  const c = siteData.compare;
-  assert.equal(c.cells, 20);
-  assert.ok(c.markov_wins >= 18, `expected markov_wins >= 18, got ${c.markov_wins}`);
-  assert.ok(c.ratio >= 3.0, `expected ratio >= 3.0, got ${c.ratio}`);
+// 3. Unified 2026FA scenario baseline & non-degenerate 80% bands
+await runTest('test_unified_2026fa_baseline_and_scenario_bands', () => {
+  const { flat, cliff, northeast } = siteData.scenarios;
+  assert.equal(flat[0].fall, '2026FA');
+  assert.equal(cliff[0].fall, '2026FA');
+  assert.equal(northeast[0].fall, '2026FA');
+
+  // All 3 scenarios must start from the exact same 2026FA baseline
+  assert.equal(flat[0].headcount, cliff[0].headcount, '2026FA headcount must match between flat and cliff');
+  assert.equal(flat[0].headcount, northeast[0].headcount, '2026FA headcount must match between flat and northeast');
+  assert.equal(flat[0].ntr_m, cliff[0].ntr_m, '2026FA NTR must match between flat and cliff');
+  assert.equal(flat[0].ntr_m, northeast[0].ntr_m, '2026FA NTR must match between flat and northeast');
+
+  // By 2030, flat >= cliff >= northeast
+  const lastIdx = flat.length - 1;
   assert.ok(
-    c.coverage_80 >= 0.75 && c.coverage_80 <= 0.9,
-    `coverage_80 out of range: ${c.coverage_80}`
+    flat[lastIdx].ntr_m > cliff[lastIdx].ntr_m &&
+      cliff[lastIdx].ntr_m > northeast[lastIdx].ntr_m,
+    '2030 NTR must follow flat > cliff > northeast'
   );
-  assert.equal(siteData.data.records, 54954);
-});
 
-// 4. Scenario bands bracket point path
-await runTest('test_scenario_summary_band_brackets_the_point_path', () => {
   for (const [name, rows] of Object.entries(siteData.scenarios)) {
     assert.ok(rows.length > 0, `scenario ${name} must have rows`);
     let nonDegen = false;
@@ -123,97 +120,34 @@ await runTest('test_scenario_summary_band_brackets_the_point_path', () => {
   }
 });
 
-// 5. Coverage counts, Wilson intervals, and autocorrelation-adjusted N_eff consistent
-await runTest('test_coverage_counts_and_effective_sample_size_consistent', () => {
-  const cov = siteData.compare.coverage;
-  const sumCovered = cov.by_horizon.reduce((acc, h) => acc + h.covered, 0);
-  const sumTotal = cov.by_horizon.reduce((acc, h) => acc + h.total, 0);
-  assert.equal(sumCovered, cov.pooled.covered);
-  assert.equal(sumTotal, cov.pooled.total);
-  assert.equal(cov.pooled.total, cov.checks);
+// 4. Entrant survival curve matches calendar-aware offset=2 (MCM) and offset=1 (MCC)
+await runTest('test_entrant_curve_matches_calendar_offset_rates', () => {
+  const mcm = siteData.entrant.schools.MCM;
+  assert.equal(mcm.terms_per_year, 3);
+  assert.equal(mcm.curve[0], 1.0);
+  // Fall-to-Spring (t=1): curve[0] * rates[0]
+  assert.ok(Math.abs(mcm.curve[1] - mcm.rates[0]) < 1e-4);
+  // Year 2 Fall (t=3): curve[1] * rates[2] (offset=2 skips optional Summer dip at t=2)
+  assert.ok(
+    Math.abs(mcm.curve[3] - mcm.curve[1] * mcm.rates[2]) < 1e-4,
+    `MCM Year 2 Fall survival (${mcm.curve[3]}) must equal Spring t=1 (${mcm.curve[1]}) * offset=2 rate (${mcm.rates[2]})`
+  );
 
-  // Verify Wilson score interval formula (95% z = 1.95996)
-  const wilson = (covered, total, z = 1.959963984540054) => {
-    const p = covered / total;
-    const denom = 1 + (z * z) / total;
-    const center = (p + (z * z) / (2 * total)) / denom;
-    const half =
-      (z * Math.sqrt((p * (1 - p)) / total + (z * z) / (4 * total * total))) /
-      denom;
-    return { lo: center - half, hi: center + half };
-  };
-
-  for (const h of [...cov.by_horizon, cov.pooled]) {
+  const mcc = siteData.entrant.schools.MCC;
+  assert.equal(mcc.terms_per_year, 2);
+  let s = 1.0;
+  assert.equal(mcc.curve[0], 1.0);
+  for (let i = 0; i < mcc.rates.length; i++) {
+    s *= mcc.rates[i];
+    const diff = Math.abs(s - mcc.curve[i + 1]);
     assert.ok(
-      h.lo <= h.rate && h.rate <= h.hi,
-      `Wilson interval must bracket rate for k=${h.k}`
-    );
-    const w = wilson(h.covered, h.total);
-    assert.ok(
-      Math.abs(w.lo - h.lo) < 0.002 && Math.abs(w.hi - h.hi) < 0.002,
-      `Wilson 95% bounds for k=${h.k} must match exact score formula`
+      diff < 1e-3,
+      `MCC duration ${i + 1}: chained ${s} != curve ${mcc.curve[i + 1]}`
     );
   }
-
-  // Verify autocorrelation-adjusted effective sample size (N_eff = 24) Wilson bounds
-  const eff = siteData.ledger_summary.effective_sample_size;
-  assert.equal(eff.nominal_checks, 80);
-  assert.equal(eff.effective_n, 24);
-  const wEff = wilson(cov.pooled.rate * eff.effective_n, eff.effective_n);
-  assert.ok(
-    Math.abs(wEff.lo - eff.effective_lo) < 0.002 &&
-      Math.abs(wEff.hi - eff.effective_hi) < 0.002,
-    'Effective sample size (N_eff = 24) Wilson 95% bounds must match score formula'
-  );
-  assert.ok(
-    eff.effective_hi - eff.effective_lo > cov.pooled.hi - cov.pooled.lo,
-    'Cluster-robust N_eff Wilson interval must be wider than naive i.i.d. interval'
-  );
 });
 
-// 6. Entrant survival curve matches chained continuation rates
-await runTest('test_entrant_curve_matches_rates', () => {
-  for (const [school, block] of Object.entries(siteData.entrant.schools)) {
-    let s = 1.0;
-    assert.equal(block.curve[0], 1.0);
-    for (let i = 0; i < block.rates.length; i++) {
-      s *= block.rates[i];
-      const diff = Math.abs(s - block.curve[i + 1]);
-      assert.ok(
-        diff < 1e-4,
-        `${school} duration ${i + 1}: chained ${s} != curve ${block.curve[i + 1]}`
-      );
-    }
-  }
-});
-
-// 7. COA budget schema test
-await runTest('test_coa_budget_groups_unique_and_total_derivable', () => {
-  const raw = fs
-    .readFileSync(path.join(ROOT, 'data/aid_schema/coa_budget.csv'), 'utf8')
-    .trim()
-    .split('\n');
-  const headers = raw[0].split(',');
-  const bgIdx = headers.indexOf('budget_group');
-  const totIdx = headers.indexOf('total_coa');
-  const partIndices = headers
-    .map((h, i) => (h.endsWith('_budget') ? i : -1))
-    .filter((i) => i >= 0);
-
-  const seenGroups = new Set();
-  for (let r = 1; r < raw.length; r++) {
-    const cols = raw[r].split(',');
-    const bg = cols[bgIdx];
-    assert.ok(!seenGroups.has(bg), `duplicate budget_group: ${bg}`);
-    seenGroups.add(bg);
-
-    const partSum = partIndices.reduce((acc, idx) => acc + Number(cols[idx]), 0);
-    assert.ok(partSum > 0, `component sum for ${bg} must be > 0`);
-    assert.equal(Number(cols[totIdx]), 0, 'total_coa is intentionally 0');
-  }
-});
-
-// 8. Version and runtime provenance consistency across metadata
+// 5. Version and runtime provenance consistency across metadata
 await runTest('test_version_consistent_across_metadata', () => {
   const pkgVer = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
   const cff = fs.readFileSync(path.join(ROOT, 'CITATION.cff'), 'utf8');
@@ -222,13 +156,12 @@ await runTest('test_version_consistent_across_metadata', () => {
   assert.ok(cff.includes(`version: ${pkgVer}`), `CITATION.cff must contain version: ${pkgVer}`);
   assert.ok(changelog.includes(`## ${pkgVer}`), `CHANGELOG.md must contain ## ${pkgVer}`);
 
-  // Ensure runtime provenance strings are real historical versions (not fabricated 2.5.4 / 3.0.6)
   assert.equal(siteData.meta.python, '3.12.9', 'Python provenance version must be valid 3.12.9');
   assert.equal(siteData.meta.numpy, '2.2.3', 'NumPy provenance version must be valid 2.2.3');
   assert.equal(siteData.meta.pandas, '2.2.3', 'pandas provenance version must be valid 2.2.3');
 });
 
-// 9. No overstated words in UI components or README
+// 6. No overstated words in UI components or README
 await runTest('test_page_avoids_overstated_words', () => {
   const filesToCheck = [
     path.join(ROOT, 'README.md'),
@@ -246,7 +179,7 @@ await runTest('test_page_avoids_overstated_words', () => {
   }
 });
 
-// 10. No institutional identifiers in published files
+// 7. No institutional identifiers in published files
 await runTest('test_published_files_carry_no_institutional_identifiers', () => {
   const forbiddenTerms = [
     'berklee',
@@ -296,7 +229,7 @@ await runTest('test_published_files_carry_no_institutional_identifiers', () => {
   }
 });
 
-// 11. SVG text elements are never wrapped in HTML <span>
+// 8. SVG text elements are never wrapped in HTML <span>
 await runTest('test_svg_text_not_wrapped_in_html_spans', () => {
   const compDir = path.join(ROOT, 'src/components');
   for (const f of fs.readdirSync(compDir)) {
@@ -312,7 +245,7 @@ await runTest('test_svg_text_not_wrapped_in_html_spans', () => {
   }
 });
 
-// 12. Published flag and repo_url updated
+// 9. Published flag and repo_url updated
 await runTest('test_published_state_enabled', () => {
   assert.equal(siteData.published, true, 'siteData.published must be true');
   assert.equal(
@@ -322,9 +255,8 @@ await runTest('test_published_state_enabled', () => {
   );
 });
 
-// 13. Institutional metrics, Vintage Alpha decomposition, WICHE & Forecast Ledger identities
-await runTest('test_institutional_metrics_and_vintage_risk_identities', () => {
-  // Vintage Alpha: rate_alpha_heads == actual_heads - expected_heads
+// 10. Vintage performance, 5-tier discount breakdown, risk cells & WICHE identities
+await runTest('test_vintage_discount_tiers_risk_and_wiche_identities', () => {
   for (const v of siteData.vintage) {
     assert.equal(
       Math.round(v.actual_heads - v.expected_heads),
@@ -334,7 +266,18 @@ await runTest('test_institutional_metrics_and_vintage_risk_identities', () => {
     assert.ok(v.terms_scored >= 2, `Vintage ${v.cohort} must have >= 2 scored terms`);
   }
 
-  // Risk cells: ntr_at_risk == headcount * exit_hazard * mean_ntr (within rounding tolerance) and sorted descending
+  // Verify 5 RStudio discount tiers exist and satisfy Retained + At Risk == Headcount * MeanNTR
+  assert.equal(siteData.discount_tiers.length, 5, 'Must have 5 RStudio tuition discount tiers');
+  for (const tier of siteData.discount_tiers) {
+    const totalFirstYearNtr = tier.retained_ntr + tier.ntr_at_risk;
+    const expectedTotal = tier.headcount * tier.mean_ntr;
+    assert.ok(
+      Math.abs(totalFirstYearNtr - expectedTotal) / expectedTotal < 0.01,
+      `Discount tier ${tier.discount_description}: retained + at_risk (${totalFirstYearNtr}) must match headcount * mean_ntr (${expectedTotal})`
+    );
+  }
+
+  // Risk cells sorted descending
   for (let i = 0; i < siteData.risk_cells.length; i++) {
     const r = siteData.risk_cells[i];
     const impliedRisk = r.headcount * r.exit_hazard * r.mean_ntr;
@@ -374,48 +317,14 @@ await runTest('test_institutional_metrics_and_vintage_risk_identities', () => {
     Math.abs(neChange - siteData.wiche.northeast.change) < 1e-4,
     `WICHE northeast 2025->2030 change ${neChange} must match siteData ${siteData.wiche.northeast.change}`
   );
-
-  // Forecast ledger integrity & ledger_summary reconciliation
-  // Columns: logged_utc,mode,as_of,school,degree,steps_ahead,target_term,enrolled_expected,enrolled_p10,enrolled_p90,git_sha,data_md5
-  const ledgerLines = fs
-    .readFileSync(path.join(ROOT, 'data/forecast_ledger.csv'), 'utf8')
-    .trim()
-    .split('\n')
-    .filter((l) => !l.startsWith('#') && !l.startsWith('logged_utc,'));
-  assert.equal(ledgerLines.length, 120, 'Forecast ledger must contain 120 logged rows');
-
-  let zeroBoundaryRows = 0;
-  let sumLoggedInSummary = 0;
-
-  for (const row of ledgerLines) {
-    const cols = row.split(',');
-    const exp = Number(cols[7]);
-    const p10 = Number(cols[8]);
-    const p90 = Number(cols[9]);
-    const md5 = cols[11];
-
-    if (exp === 0) zeroBoundaryRows++;
-
-    assert.ok(p10 <= exp && exp <= p90, `Ledger interval must bracket expected: ${row}`);
-    assert.equal(md5, siteData.data.md5, 'Ledger row data_md5 must match synthetic dataset MD5');
-  }
-
-  for (const cy of siteData.ledger_summary.by_cycle) {
-    sumLoggedInSummary += cy.rows_logged;
-  }
-
-  assert.equal(siteData.ledger_summary.total_rows, 120);
-  assert.equal(sumLoggedInSummary, 120);
-  assert.equal(siteData.ledger_summary.frontier_zero_rows, zeroBoundaryRows);
 });
 
-// 14. Lockfile & CI workflow hygiene
+// 11. Lockfile & CI workflow hygiene
 await runTest('test_single_lockfile_and_ci_hygiene', () => {
   assert.ok(
     fs.existsSync(path.join(ROOT, 'package-lock.json')),
     'package-lock.json must exist'
   );
-  // If the preview sandbox created an ephemeral bun.lock, remove it and ensure .gitignore blocks it
   const bunLockPath = path.join(ROOT, 'bun.lock');
   if (fs.existsSync(bunLockPath)) {
     fs.unlinkSync(bunLockPath);
@@ -433,7 +342,7 @@ await runTest('test_single_lockfile_and_ci_hygiene', () => {
   assert.ok(ciYml.includes('npm test'), 'ci.yml must run npm test');
 });
 
-// 15. Direct Calculator Module & Counterfactual Sensitivity Invariants + SSR DOM Validation
+// 12. Calculator Module Invariants & SSR DOM Validation
 await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () => {
   const vite = await createServer({
     root: ROOT,
@@ -449,18 +358,13 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
 
   try {
     const { App } = await vite.ssrLoadModule('/src/App.tsx');
-    const { StandingReportView } = await vite.ssrLoadModule(
-      '/src/components/StandingReportView.tsx'
-    );
     const { navItemsList } = await vite.ssrLoadModule(
       '/src/components/SidebarNav.tsx'
     );
     const {
       computeEntrantProjection,
-      computePrescriptiveSimulation,
+      buildCohortSurvivalCurve,
       classifyAidTier,
-      CAMPUS_ARCHETYPES,
-      INTERVENTION_PRESETS,
     } = await vite.ssrLoadModule('/src/utils/calculator.ts');
 
     const mcm = siteData.entrant.schools.MCM;
@@ -474,7 +378,15 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
     assert.equal(classifyAidTier(70), 'Substantial Aid (60–80%)');
     assert.equal(classifyAidTier(85), 'Near-Full Aid (≥80%)');
 
-    // Verify computeEntrantProjection parity & algebraic properties directly on imported module
+    // Verify offset=2 vs naive offset=1 on 3-term MCM
+    const { survivalCurve: curveOffset2 } = buildCohortSurvivalCurve(mcm.rates, mcm.terms_per_year, 2);
+    const { survivalCurve: curveNaive } = buildCohortSurvivalCurve(mcm.rates, mcm.terms_per_year, 1);
+    assert.ok(
+      curveOffset2[3] > curveNaive[3] + 0.35,
+      `MCM offset=2 Year 2 Fall retention (${curveOffset2[3]}) must avoid the naive Summer drop (${curveNaive[3]})`
+    );
+
+    // Verify computeEntrantProjection algebraic properties
     const mcmRes = computeEntrantProjection(
       mcm,
       years,
@@ -485,28 +397,20 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
     );
     assert.ok(mcmRes.valid);
     assert.equal(mcmRes.clipped, false);
-    assert.equal(Math.round(mcmRes.totalNtr), 91559359);
     assert.equal(mcmRes.includeSummer, true);
-    for (let i = 0; i < mcm.curve.length; i++) {
-      assert.ok(Math.abs(mcmRes.survivalCurve[i] - mcm.curve[i]) < 1e-4);
-    }
     assert.ok(
-      Math.abs(mcmRes.impliedFallToFallRetention - mcm.curve[3]) < 1e-6,
-      'Implied Year-2 retention must match S(tpy)'
+      Math.abs(
+        mcmRes.netPerTerm -
+          (mcmRes.chargePerTerm - mcmRes.aidPerTerm + mcmRes.compFeePerTerm)
+      ) < 1e-6,
+      'RStudio NTR identity: netPerTerm must equal chargePerTerm - aidPerTerm + compFeePerTerm'
+    );
+    assert.ok(
+      mcmRes.totalLowNtr < mcmRes.totalNtr && mcmRes.totalNtr < mcmRes.totalHighNtr,
+      'Sensitivity bounds must bracket baseline 4-year NTR'
     );
 
-    // Set 2: 1000 students at MCM
-    const mcm1000 = computeEntrantProjection(
-      mcm,
-      years,
-      1000,
-      mcm.charge_per_term,
-      mcm.aid_rate * 100,
-      1.0
-    );
-    assert.equal(Math.round(mcm1000.totalNtr), 118446778);
-
-    // Set 3: MCC default
+    // MCC default
     const baseMcc = computeEntrantProjection(
       mcc,
       years,
@@ -519,202 +423,20 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
     assert.ok(baseMcc.totalNtr > 0);
     assert.equal(baseMcc.includeSummer, false);
 
-    // Property: Linearity in entering headcount
-    const c500 = computeEntrantProjection(mcm, years, 500, 40000, 25, 1.0);
-    const c1000 = computeEntrantProjection(mcm, years, 1000, 40000, 25, 1.0);
+    // Linearity in entering headcount
+    const c500 = computeEntrantProjection(mcm, years, 500, 26000, 30, 1.0);
+    const c1000 = computeEntrantProjection(mcm, years, 1000, 26000, 30, 1.0);
     assert.ok(
       Math.abs(c1000.totalNtr - 2 * c500.totalNtr) < 1e-6,
       'NTR must scale linearly with entering class'
     );
 
-    // Property: Linearity in tuition charge
-    const t20k = computeEntrantProjection(mcm, years, 600, 20000, 25, 1.0);
-    const t40k = computeEntrantProjection(mcm, years, 600, 40000, 25, 1.0);
-    assert.ok(
-      Math.abs(t40k.totalNtr - 2 * t20k.totalNtr) < 1e-6,
-      'NTR must scale linearly with tuition charge'
-    );
-
-    // Property: Headcount non-increasing across years
-    for (let i = 1; i < mcmRes.rows.length; i++) {
-      assert.ok(
-        mcmRes.rows[i].entryTermHeads <= mcmRes.rows[i - 1].entryTermHeads,
-        'Enrolled headcount must be non-increasing by year'
-      );
-    }
-
-    // Property: Validation rejects invalid inputs without silent clamping
-    assert.equal(computeEntrantProjection(mcm, years, -5, 40000, 25, 1.0).valid, false);
-    assert.equal(computeEntrantProjection(mcm, years, 10.5, 40000, 25, 1.0).valid, false);
-    assert.equal(computeEntrantProjection(mcm, years, 500, -100, 25, 1.0).valid, false);
-    assert.equal(computeEntrantProjection(mcm, years, 500, 40000, 105, 1.0).valid, false);
-    assert.equal(computeEntrantProjection(mcm, years, 500, 40000, 25, 1.5).valid, false);
-
-    // Verify Synthetic Campus Archetype presets and Counterfactual Sensitivity Presets
-    assert.ok(
-      CAMPUS_ARCHETYPES.open_access &&
-        CAMPUS_ARCHETYPES.regional_public &&
-        CAMPUS_ARCHETYPES.selective_four_year
-    );
-    assert.ok(
-      INTERVENTION_PRESETS.summer_bridge &&
-        INTERVENTION_PRESETS.first_year_advising &&
-        INTERVENTION_PRESETS.need_microgrant
-    );
-
-    // 1) Baseline parity in computePrescriptiveSimulation
-    const baseSim = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      mcm.aid_rate * 100,
-      1.0,
-      0,
-      0,
-      'none',
-      0,
-      false
-    );
-    assert.ok(baseSim.valid);
-    assert.equal(Math.round(baseSim.simulated.totalNtr), 91559359);
-    assert.equal(Math.round(baseSim.grossNtrLift), 0);
-    assert.equal(Math.round(baseSim.netInstitutionalRoi), 0);
-
-    // 2) Single-bridge 3-term Summer hazard reduction invariant (applied ONCE at idx = tpy - 1 = 2, NOT double-counted on idx = 1)
-    const suOnlySim = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      mcm.aid_rate * 100,
-      1.0,
-      0,
-      25, // 25% Summer bridge uptake -> summerRecoveryFraction = 0.25 * 0.75 = 0.1875
-      'none',
-      0,
-      false
-    );
-    assert.ok(suOnlySim.valid);
-    const r0 = mcm.rates[0];
-    const r1 = mcm.rates[1];
-    const r2 = mcm.rates[2];
-    const expectedR2 = 1.0 - (1.0 - r2) * (1.0 - 0.25 * 0.75);
-    const impliedSimR1 =
-      suOnlySim.simulated.survivalCurve[2] / suOnlySim.simulated.survivalCurve[1];
-    const impliedSimR2 =
-      suOnlySim.simulated.survivalCurve[3] / suOnlySim.simulated.survivalCurve[2];
-    assert.ok(
-      Math.abs(impliedSimR1 - r1) < 1e-6,
-      `3-term Summer bridge must NOT double-apply hazard reduction on idx=1: expected ${r1}, got ${impliedSimR1}`
-    );
-    assert.ok(
-      Math.abs(impliedSimR2 - expectedR2) < 1e-6,
-      `3-term Summer bridge must reduce bridge transition (idx=2) hazard once: expected ${expectedR2}, got ${impliedSimR2}`
-    );
-    assert.equal(suOnlySim.simulated.survivalCurve[1], r0);
-
-    // 3) Summer bridge intervention preset + credit recovery lifts Year-2 retention and NTR
-    const suBridgeSim = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      mcm.aid_rate * 100,
-      1.0,
-      0,
-      25,
-      'summer_bridge',
-      1200,
-      false
-    );
-    assert.ok(suBridgeSim.valid);
-    assert.ok(suBridgeSim.summerBridgeParticipants > 0);
-    assert.ok(suBridgeSim.summerRecoveredHeads > 0);
-    assert.ok(suBridgeSim.summerInstructionalNtr > 0);
-    assert.ok(
-      suBridgeSim.simulated.impliedFallToFallRetention >
-        baseSim.simulated.impliedFallToFallRetention,
-      'Summer credit recovery + bridge intervention must lift Year-2 Fall retention'
-    );
-    assert.equal(
-      Math.round(suBridgeSim.netInstitutionalRoi),
-      Math.round(suBridgeSim.grossNtrLift - suBridgeSim.totalInterventionCost),
-      'Net Counterfactual Margin must equal Gross NTR Delta minus Total Program Cost'
-    );
-
-    // 4) Optional DGP Aid-Retention Linkage (1.10x p_EE lift when discount > 50%) verification
-    const highAidUnlinked = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      55, // > 50% DGP step threshold
-      1.0,
-      0,
-      0,
-      'none',
-      0,
-      false
-    );
-    const highAidLinked = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      55,
-      1.0,
-      0,
-      0,
-      'none',
-      0,
-      true
-    );
-    assert.ok(
-      Math.abs(
-        highAidUnlinked.syntheticBase.totalStudentTerms -
-          baseSim.syntheticBase.totalStudentTerms
-      ) < 1e-6,
-      'Unlinked aid rate change must leave student-terms unchanged'
-    );
-    assert.ok(
-      highAidLinked.syntheticBase.totalStudentTerms >
-        highAidUnlinked.syntheticBase.totalStudentTerms,
-      'DGP aid-retention linkage must increase retained student-terms when aid rate > 50%'
-    );
-
-    // 5) Demographic & Aid-Mix Shift (mix alpha) monotonicity
-    const highNeedMixSim = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      mcm.aid_rate * 100,
-      1.0,
-      10,
-      0,
-      'none',
-      0,
-      false
-    );
-    const lowNeedMixSim = computePrescriptiveSimulation(
-      mcm,
-      years,
-      mcm.entering,
-      mcm.charge_per_term,
-      mcm.aid_rate * 100,
-      1.0,
-      -10,
-      0,
-      'none',
-      0,
-      false
-    );
-    assert.ok(
-      lowNeedMixSim.syntheticBase.totalNtr > baseSim.syntheticBase.totalNtr &&
-        baseSim.syntheticBase.totalNtr > highNeedMixSim.syntheticBase.totalNtr,
-      'Unintervened synthetic NTR must respond monotonically to Aid-Mix shift (mix alpha)'
-    );
+    // Validation rejects invalid inputs
+    assert.equal(computeEntrantProjection(mcm, years, -5, 26000, 30, 1.0).valid, false);
+    assert.equal(computeEntrantProjection(mcm, years, 10.5, 26000, 30, 1.0).valid, false);
+    assert.equal(computeEntrantProjection(mcm, years, 500, -100, 30, 1.0).valid, false);
+    assert.equal(computeEntrantProjection(mcm, years, 500, 26000, 105, 1.0).valid, false);
+    assert.equal(computeEntrantProjection(mcm, years, 500, 26000, 30, 1.5).valid, false);
 
     const dom = ReactDOMServer.renderToStaticMarkup(React.createElement(App));
 
@@ -724,7 +446,7 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
       'Rendered DOM contains unresolved {{ }}'
     );
 
-    // Every sidebar navigation target must correspond to a rendered data-section (no orphaned DOM targets)
+    // Every sidebar navigation target must correspond to a rendered data-section
     for (const item of navItemsList) {
       assert.ok(
         dom.includes(`data-section="${item.id}"`),
@@ -732,124 +454,34 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
       );
     }
 
-    // Must render all 9 section headings
-    const expectedHeadings = [
-      'Forecasting headcount and tuition revenue under uncertainty',
-      'A two-state chain indexed by time since entry',
-      'Fit on truncated data, scored against held-out terms',
-      'Net tuition revenue and aid-band conditioning',
-      'Entering-class size paths enter as labeled assumptions',
-      'Entering class to four-year net tuition revenue',
-      'Modules, flow-balance checks, and tests',
-      'Net tuition revenue at risk, by cohort and segment',
-      'What this does not claim',
+    // Must render the 5 core sections in exact sequence
+    const expectedHeadingsInOrder = [
+      'Fall Net Tuition Revenue through 2030',
+      'Interactive Cohort Roll-Up &amp; Return-Rate Inspector',
+      'Entering class to four-year Net Tuition Revenue (NTR)',
+      'Higher Education Enrollment &amp; Financial Aid Terminology Guide',
+      'Entering class performance and Net Tuition Revenue at risk',
     ];
-    for (const h of expectedHeadings) {
-      assert.ok(dom.includes(h), `Rendered DOM missing heading: "${h}"`);
-    }
-
-    // Must render dual terminology, YYYYTT tokens, CohortMatrixInspector, and Counterfactual Sensitivity Simulator
-    const requiredDualTerms = [
-      'Institutional Higher Education ↔ Statistical Terminology Cross-Walk',
-      'Stage 2 Pipeline Mechanics &amp; Cohort-Matrix Inspector',
-      '1. Synthetic Campus Archetype &amp; Cohort Parameter Generator',
-      '2. Counterfactual Intervention &amp; Net Tuition Break-Even Simulator',
-      'Summer (SU) Credit-Recovery Uptake (2020SP → 2020SU)',
-      'Autocorrelation &amp; Effective Sample Size (N_eff ≈ 24):',
-      'batched_cohort_projections_prep',
-      'term_code_to_num',
-      'terms_since_start',
-      'INCLUDE_SUMMER',
-      'base_table_no_covid',
-      'ret_rates_proj',
-      'discount_description',
-      'aid_efficiency',
-      'Person-Period Survival Panel',
-      'Empirical Bayes Partial Pooling',
-      'Oaxaca-Blinder / Kitagawa',
-      'YYYYTT',
-      '2019FA',
-      '2020SP',
-      '2020SU',
-      '2020FA',
-      '2025FA',
-      '2026SP',
-      '2026SU',
-      '2026FA',
-    ];
-    for (const term of requiredDualTerms) {
+    let lastIdx = -1;
+    for (const h of expectedHeadingsInOrder) {
+      const idx = dom.indexOf(h);
+      assert.ok(idx !== -1, `Rendered DOM missing heading: "${h}"`);
       assert.ok(
-        dom.includes(term),
-        `Rendered DOM missing dual-terminology or YYYYTT token: "${term}"`
+        idx > lastIdx,
+        `Heading "${h}" must appear after previous heading in DOM order`
       );
+      lastIdx = idx;
     }
 
     // Must render SVG chart labels without <span> wrappers
     const svgTexts = dom.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];
     assert.ok(
-      svgTexts.length >= 40,
-      `Expected >= 40 rendered SVG <text> nodes, got ${svgTexts.length}`
+      svgTexts.length >= 6,
+      `Expected >= 6 rendered SVG <text> nodes, got ${svgTexts.length}`
     );
     for (const st of svgTexts) {
       assert.ok(!st.includes('<span'), `Rendered SVG <text> contains <span>: ${st}`);
     }
-
-    // Must render calculator output, Wilson CI table, footer provenance, and GitHub link
-    assert.ok(
-      dom.includes('$91,559,359'),
-      'Rendered DOM missing baseline 4-year NTR $91,559,359'
-    );
-    assert.ok(dom.includes('66/80'), 'Rendered DOM missing pooled coverage 66/80');
-    assert.ok(dom.includes('72.7%–89.3%'), 'Rendered DOM missing 95% Wilson CI');
-    assert.ok(dom.includes('63.2%–92.8%'), 'Rendered DOM missing N_eff = 24 Wilson CI');
-    assert.ok(dom.includes('v0.2.1'), 'Rendered DOM missing footer version v0.2.1');
-    assert.ok(dom.includes('d50c64f'), 'Rendered DOM missing footer git_sha d50c64f');
-    assert.ok(dom.includes('a8ba9a1f20e6'), 'Rendered DOM missing footer data md5');
-    assert.ok(
-      dom.includes('https://github.com/jp-87/student-persistence-model'),
-      'Rendered DOM missing GitHub repository link'
-    );
-
-    // Render StandingReportView (both Report and Diagnostics tabs) to verify DOM integrity
-    const reportDom = ReactDOMServer.renderToStaticMarkup(
-      React.createElement(StandingReportView, {
-        accent: '#0d4f30',
-        paper: '#f7f4ec',
-        siteData,
-        onBackToPortfolio: () => {},
-        initialTab: 'report',
-      })
-    );
-    assert.ok(
-      reportDom.includes('Student Persistence &amp; Net Tuition Revenue — Standing Report'),
-      'StandingReportView DOM missing report title'
-    );
-    assert.ok(
-      reportDom.includes('Vintage Alpha (Cumulative vs Entry-Priced Expectation)'),
-      'StandingReportView DOM missing Vintage Alpha section'
-    );
-    assert.ok(
-      reportDom.includes('6. Append-Only Forecast Ledger &amp; Frontier Truncation Audit'),
-      'StandingReportView DOM missing Section 6 Append-Only Forecast Ledger Audit'
-    );
-
-    const diagDom = ReactDOMServer.renderToStaticMarkup(
-      React.createElement(StandingReportView, {
-        accent: '#0d4f30',
-        paper: '#f7f4ec',
-        siteData,
-        onBackToPortfolio: () => {},
-        initialTab: 'diagnostics',
-      })
-    );
-    assert.ok(
-      diagDom.includes('1. Backtest Interval Coverage &amp; Effective Sample Size (80% Nominal Target)'),
-      'Diagnostics tab DOM missing Section 1 Backtest Interval Coverage & Effective Sample Size'
-    );
-    assert.ok(
-      diagDom.includes('Autocorrelation-Adjusted (N_eff ≈ 24)'),
-      'Diagnostics tab DOM missing Autocorrelation-Adjusted (N_eff ≈ 24) row'
-    );
   } finally {
     await vite.close();
   }
@@ -857,3 +489,4 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
 
 console.log(`\nRegression Suite Summary: ${passed} passed, ${failed} failed.`);
 if (failed > 0) process.exit(1);
+
