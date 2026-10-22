@@ -92,6 +92,10 @@ export const CalculatorSection: React.FC<CalculatorSectionProps> = ({
   const activeYearRow = scenario.rows[selectedYearIdx] || scenario.rows[0];
   const baseYearRow = baseline.rows[selectedYearIdx] || baseline.rows[0];
 
+  const displayedTotalTerms = scenario.rows.reduce(
+    (acc, r) => acc + Math.round(r.enrolledStudentTerms),
+    0
+  );
   const totalDiffUsd = scenario.totalNtr - baseline.totalNtr;
 
   return (
@@ -245,7 +249,7 @@ export const CalculatorSection: React.FC<CalculatorSectionProps> = ({
                 4-Year Billed Student-Terms
               </div>
               <div className="text-[22px] font-extrabold tracking-tight text-[#1b1c18] mt-0.5 leading-none font-mono tabular-nums">
-                {Math.round(scenario.totalStudentTerms).toLocaleString('en-US')}
+                {displayedTotalTerms.toLocaleString('en-US')}
                 <span className="text-[12px] font-normal text-[#8a887e] ml-1">
                   terms
                 </span>
@@ -354,7 +358,7 @@ export const CalculatorSection: React.FC<CalculatorSectionProps> = ({
                 {scenario.entering.toLocaleString('en-US')}
               </span>
               <span className="text-right">
-                {Math.round(scenario.totalStudentTerms).toLocaleString('en-US')}
+                {displayedTotalTerms.toLocaleString('en-US')}
               </span>
               <span className="text-right" style={{ color: accent }}>
                 {usd(scenario.netPerTerm)}
@@ -604,7 +608,22 @@ export const CalculatorSection: React.FC<CalculatorSectionProps> = ({
         chartFooterRight={
           activeYearRow && baseYearRow ? (
             <>
-              {activeYearRow.label} base: <strong>{usdM(baseYearRow.ntr)}</strong>
+              {activeYearRow.label}: Fall{' '}
+              <strong>{activeYearRow.entryTermHeads.toLocaleString('en-US')}</strong>{' '}
+              + Spr{' '}
+              <strong>
+                {activeYearRow.springTermHeads.toLocaleString('en-US')}
+              </strong>
+              {scenario.includeSummer ? (
+                <>
+                  {' '}
+                  + Sum{' '}
+                  <strong>
+                    {activeYearRow.summerTermHeads.toLocaleString('en-US')}
+                  </strong>
+                </>
+              ) : null}{' '}
+              (base: <strong>{usdM(baseYearRow.ntr)}</strong>)
             </>
           ) : undefined
         }

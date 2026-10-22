@@ -1,37 +1,45 @@
 import React, { useState } from 'react';
-import { InteractiveSplitPanel } from './InteractiveSplitPanel';
-import { buildCohortSurvivalCurve } from '../utils/calculator';
+import siteDataRaw from '../data/siteData.json';
+import { SiteData } from '../data/types';
+import {
+  buildCohortSurvivalCurve,
+  termIntToTerm,
+  termToTermInt,
+} from '../utils/calculator';
+
+const SITE_DATA = siteDataRaw as unknown as SiteData;
 
 interface CohortMatrixInspectorProps {
   accent: string;
 }
 
 type SchoolCode = 'MCM' | 'MCC';
-type CensusTargetTerm = '2025FA' | '2026SP' | '2026SU' | '2026FA';
-type RightChartMode = 'rollup' | 'survival';
+type CensusTargetTerm = '2025SU' | '2025FA' | '2026SP' | '2026SU' | '2026FA';
+
+export type IntakeType = 'fall' | 'spring' | 'summer';
 
 interface CohortHistoryDef {
   cohortTerm: string;
   entrants: number;
   color: string;
+  intakeType: IntakeType;
+  standingLabel: string;
   observed: Record<number, { calendarTerm: string; heads: number }>;
 }
 
 /**
- * Authentic Stage 2 Positron IDE Cohort Registration Triangles
+ * Stage 2 Positron IDE Cohort Registration Triangles
  * (`cohort_projections_prep.ipynb` & `batched_cohort_projections_prep.ipynb`):
- * - MCM (Millbury College of Music (MCM) 3-Term Calendar: Fall, Spring, Optional Summer):
- *   - 2021FA (1,345): t0=1345, t1=1287, t2=193, t3=1134, t4=1093, t5=307, t6=1044, t7=1009, t8=327, t9=860, t10=764, t11=178, t12=143
- *   - 2022FA (1,245): t0=1245, t1=1175, t2=102, t3=1071, t4=995, t5=283, t6=966, t7=924, t8=307, t9=783
- *   - 2023FA (1,111): t0=1111, t1=1085, t2=101, t3=990, t4=963, t5=247, t6=943
- *   - 2024FA (1,159): t0=1159, t1=1113, t2=114, t3=961
- *   - 2025FA (1,123): t0=1123
+ * Multi-intake architecture sorted in chronological integer `term_int` order:
+ * Summer (YYYYSU = YYYY1) -> Fall (YYYYFA = YYYY2) -> Spring (YYYYSP = (YYYY-1)3)
  */
 const MCM_COHORTS: CohortHistoryDef[] = [
   {
-    cohortTerm: '2021FA',
+    cohortTerm: '2021FA', // cohort_int: 20212
     entrants: 1345,
     color: '#9c998e',
+    intakeType: 'fall',
+    standingLabel: '5th-Year Fall Starters',
     observed: {
       0: { calendarTerm: '2021FA', heads: 1345 },
       1: { calendarTerm: '2022SP', heads: 1287 },
@@ -49,9 +57,32 @@ const MCM_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2022FA',
+    cohortTerm: '2022SP', // cohort_int: 20213
+    entrants: 244,
+    color: '#83c5be',
+    intakeType: 'spring',
+    standingLabel: '4th-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2022SP', heads: 244 },
+      1: { calendarTerm: '2022SU', heads: 45 },
+      2: { calendarTerm: '2022FA', heads: 218 },
+      3: { calendarTerm: '2023SP', heads: 208 },
+      4: { calendarTerm: '2023SU', heads: 58 },
+      5: { calendarTerm: '2023FA', heads: 194 },
+      6: { calendarTerm: '2024SP', heads: 185 },
+      7: { calendarTerm: '2024SU', heads: 62 },
+      8: { calendarTerm: '2024FA', heads: 168 },
+      9: { calendarTerm: '2025SP', heads: 156 },
+      10: { calendarTerm: '2025SU', heads: 36 },
+      11: { calendarTerm: '2025FA', heads: 134 },
+    },
+  },
+  {
+    cohortTerm: '2022FA', // cohort_int: 20222
     entrants: 1245,
     color: '#7a786e',
+    intakeType: 'fall',
+    standingLabel: 'Seniors (Year 4 Fall)',
     observed: {
       0: { calendarTerm: '2022FA', heads: 1245 },
       1: { calendarTerm: '2023SP', heads: 1175 },
@@ -66,9 +97,29 @@ const MCM_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2023FA',
+    cohortTerm: '2023SP', // cohort_int: 20223
+    entrants: 182,
+    color: '#5bc0be',
+    intakeType: 'spring',
+    standingLabel: '3rd-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2023SP', heads: 182 },
+      1: { calendarTerm: '2023SU', heads: 38 },
+      2: { calendarTerm: '2023FA', heads: 165 },
+      3: { calendarTerm: '2024SP', heads: 158 },
+      4: { calendarTerm: '2024SU', heads: 48 },
+      5: { calendarTerm: '2024FA', heads: 146 },
+      6: { calendarTerm: '2025SP', heads: 139 },
+      7: { calendarTerm: '2025SU', heads: 42 },
+      8: { calendarTerm: '2025FA', heads: 128 },
+    },
+  },
+  {
+    cohortTerm: '2023FA', // cohort_int: 20232
     entrants: 1111,
     color: '#b06a3a',
+    intakeType: 'fall',
+    standingLabel: 'Juniors (Year 3 Fall)',
     observed: {
       0: { calendarTerm: '2023FA', heads: 1111 },
       1: { calendarTerm: '2024SP', heads: 1085 },
@@ -80,9 +131,26 @@ const MCM_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2024FA',
+    cohortTerm: '2024SP', // cohort_int: 20233
+    entrants: 186,
+    color: '#2596be',
+    intakeType: 'spring',
+    standingLabel: '2nd-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2024SP', heads: 186 },
+      1: { calendarTerm: '2024SU', heads: 42 },
+      2: { calendarTerm: '2024FA', heads: 168 },
+      3: { calendarTerm: '2025SP', heads: 159 },
+      4: { calendarTerm: '2025SU', heads: 46 },
+      5: { calendarTerm: '2025FA', heads: 148 },
+    },
+  },
+  {
+    cohortTerm: '2024FA', // cohort_int: 20242
     entrants: 1159,
     color: '#2e6f4e',
+    intakeType: 'fall',
+    standingLabel: 'Sophomores (Year 2 Fall)',
     observed: {
       0: { calendarTerm: '2024FA', heads: 1159 },
       1: { calendarTerm: '2025SP', heads: 1113 },
@@ -91,26 +159,106 @@ const MCM_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2025FA',
+    cohortTerm: '2025SP', // cohort_int: 20243
+    entrants: 185,
+    color: '#1e7e9a',
+    intakeType: 'spring',
+    standingLabel: '1st-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2025SP', heads: 185 },
+      1: { calendarTerm: '2025SU', heads: 44 },
+      2: { calendarTerm: '2025FA', heads: 166 },
+    },
+  },
+  {
+    cohortTerm: '2025SU', // cohort_int: 20251
+    entrants: 120,
+    color: '#d97706',
+    intakeType: 'summer',
+    standingLabel: '1st-Year Summer Starters',
+    observed: {
+      0: { calendarTerm: '2025SU', heads: 120 },
+      1: { calendarTerm: '2025FA', heads: 112 },
+    },
+  },
+  {
+    cohortTerm: '2025FA', // cohort_int: 20252
     entrants: 1123,
     color: '#0d4f30',
+    intakeType: 'fall',
+    standingLabel: 'Freshmen (Entering Fall)',
     observed: {
       0: { calendarTerm: '2025FA', heads: 1123 },
     },
   },
   {
-    cohortTerm: '2026FA',
+    cohortTerm: '2026SP', // cohort_int: 20253
+    entrants: 185,
+    color: '#0e7490',
+    intakeType: 'spring',
+    standingLabel: 'Projected Spring Entrants',
+    observed: {},
+  },
+  {
+    cohortTerm: '2026SU', // cohort_int: 20261
+    entrants: 120,
+    color: '#b45309',
+    intakeType: 'summer',
+    standingLabel: 'Projected Summer Entrants',
+    observed: {},
+  },
+  {
+    cohortTerm: '2026FA', // cohort_int: 20262
     entrants: 1120,
     color: '#4e8a69',
+    intakeType: 'fall',
+    standingLabel: 'Projected Fall Freshmen',
     observed: {},
   },
 ];
 
 const MCC_COHORTS: CohortHistoryDef[] = [
   {
-    cohortTerm: '2022FA',
+    cohortTerm: '2021FA', // cohort_int: 20212
+    entrants: 350,
+    color: '#9c998e',
+    intakeType: 'fall',
+    standingLabel: '5th-Year Fall Starters',
+    observed: {
+      0: { calendarTerm: '2021FA', heads: 350 },
+      1: { calendarTerm: '2022SP', heads: 334 },
+      2: { calendarTerm: '2022FA', heads: 300 },
+      3: { calendarTerm: '2023SP', heads: 288 },
+      4: { calendarTerm: '2023FA', heads: 268 },
+      5: { calendarTerm: '2024SP', heads: 260 },
+      6: { calendarTerm: '2024FA', heads: 245 },
+      7: { calendarTerm: '2025SP', heads: 235 },
+      8: { calendarTerm: '2025FA', heads: 46 },
+    },
+  },
+  {
+    cohortTerm: '2022SP', // cohort_int: 20213
+    entrants: 44,
+    color: '#83c5be',
+    intakeType: 'spring',
+    standingLabel: '4th-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2022SP', heads: 44 },
+      1: { calendarTerm: '2022FA', heads: 39 },
+      2: { calendarTerm: '2023SP', heads: 37 },
+      3: { calendarTerm: '2023FA', heads: 35 },
+      4: { calendarTerm: '2024SP', heads: 34 },
+      5: { calendarTerm: '2024FA', heads: 32 },
+      6: { calendarTerm: '2025SP', heads: 31 },
+      7: { calendarTerm: '2025FA', heads: 30 },
+    },
+  },
+  {
+    cohortTerm: '2022FA', // cohort_int: 20222
     entrants: 336,
     color: '#7a786e',
+    intakeType: 'fall',
+    standingLabel: 'Seniors (Year 4 Fall)',
     observed: {
       0: { calendarTerm: '2022FA', heads: 336 },
       1: { calendarTerm: '2023SP', heads: 320 },
@@ -122,9 +270,26 @@ const MCC_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2023FA',
+    cohortTerm: '2023SP', // cohort_int: 20223
+    entrants: 46,
+    color: '#5bc0be',
+    intakeType: 'spring',
+    standingLabel: '3rd-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2023SP', heads: 46 },
+      1: { calendarTerm: '2023FA', heads: 41 },
+      2: { calendarTerm: '2024SP', heads: 39 },
+      3: { calendarTerm: '2024FA', heads: 37 },
+      4: { calendarTerm: '2025SP', heads: 35 },
+      5: { calendarTerm: '2025FA', heads: 34 },
+    },
+  },
+  {
+    cohortTerm: '2023FA', // cohort_int: 20232
     entrants: 332,
     color: '#b06a3a',
+    intakeType: 'fall',
+    standingLabel: 'Juniors (Year 3 Fall)',
     observed: {
       0: { calendarTerm: '2023FA', heads: 332 },
       1: { calendarTerm: '2024SP', heads: 317 },
@@ -134,9 +299,24 @@ const MCC_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2024FA',
+    cohortTerm: '2024SP', // cohort_int: 20233
+    entrants: 50,
+    color: '#2596be',
+    intakeType: 'spring',
+    standingLabel: '2nd-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2024SP', heads: 50 },
+      1: { calendarTerm: '2024FA', heads: 45 },
+      2: { calendarTerm: '2025SP', heads: 43 },
+      3: { calendarTerm: '2025FA', heads: 40 },
+    },
+  },
+  {
+    cohortTerm: '2024FA', // cohort_int: 20242
     entrants: 338,
     color: '#2e6f4e',
+    intakeType: 'fall',
+    standingLabel: 'Sophomores (Year 2 Fall)',
     observed: {
       0: { calendarTerm: '2024FA', heads: 338 },
       1: { calendarTerm: '2025SP', heads: 322 },
@@ -144,17 +324,40 @@ const MCC_COHORTS: CohortHistoryDef[] = [
     },
   },
   {
-    cohortTerm: '2025FA',
+    cohortTerm: '2025SP', // cohort_int: 20243
+    entrants: 48,
+    color: '#1e7e9a',
+    intakeType: 'spring',
+    standingLabel: '1st-Year Spring Starters',
+    observed: {
+      0: { calendarTerm: '2025SP', heads: 48 },
+      1: { calendarTerm: '2025FA', heads: 44 },
+    },
+  },
+  {
+    cohortTerm: '2025FA', // cohort_int: 20252
     entrants: 344,
     color: '#0d4f30',
+    intakeType: 'fall',
+    standingLabel: 'Freshmen (Entering Fall)',
     observed: {
       0: { calendarTerm: '2025FA', heads: 344 },
     },
   },
   {
-    cohortTerm: '2026FA',
+    cohortTerm: '2026SP', // cohort_int: 20253
+    entrants: 48,
+    color: '#0e7490',
+    intakeType: 'spring',
+    standingLabel: 'Projected Spring Entrants',
+    observed: {},
+  },
+  {
+    cohortTerm: '2026FA', // cohort_int: 20262
     entrants: 340,
     color: '#4e8a69',
+    intakeType: 'fall',
+    standingLabel: 'Projected Fall Freshmen',
     observed: {},
   },
 ];
@@ -187,32 +390,94 @@ const TRANSITION_RATES = {
   },
 };
 
-function stepTerm(termCode: string, steps: number, termsPerYear: number): string {
-  const year = Number(termCode.slice(0, 4));
-  const season = termCode.slice(4);
-  if (termsPerYear === 3) {
-    const seasons = ['FA', 'SP', 'SU'];
-    const sIdx = seasons.indexOf(season);
-    const total = sIdx + steps;
-    const newSeason = seasons[total % 3];
-    // FA -> SP increments calendar year by 1
-    let curYear = year;
-    let curSeasonIdx = sIdx;
-    for (let i = 0; i < steps; i++) {
-      if (curSeasonIdx === 0) curYear += 1;
-      curSeasonIdx = (curSeasonIdx + 1) % 3;
+/**
+ * Advances a term code forward by `steps` calendar terms using the exact
+ * Positron IDE integer `term_int` encoding:
+ * - 3-term MCM: YYYY1 (SU) -> YYYY2 (FA) -> YYYY3 (SP) -> (YYYY+1)1 (SU)
+ * - 2-term MCC: YYYY2 (FA) -> YYYY3 (SP) -> (YYYY+1)2 (FA)
+ */
+function stepTermByInt(
+  termCode: string,
+  steps: number,
+  termsPerYear: number
+): string {
+  const startInt = termToTermInt(termCode);
+  let academicYear = Math.floor(startInt / 10);
+  let suffix = startInt % 10;
+
+  for (let i = 0; i < steps; i++) {
+    if (termsPerYear === 3) {
+      if (suffix === 1) {
+        suffix = 2;
+      } else if (suffix === 2) {
+        suffix = 3;
+      } else {
+        academicYear += 1;
+        suffix = 1;
+      }
+    } else {
+      if (suffix === 2) {
+        suffix = 3;
+      } else {
+        academicYear += 1;
+        suffix = 2;
+      }
     }
-    return `${curYear}${newSeason}`;
-  } else {
-    const seasons = ['FA', 'SP'];
-    let curYear = year;
-    let curSeasonIdx = seasons.indexOf(season);
-    for (let i = 0; i < steps; i++) {
-      if (curSeasonIdx === 0) curYear += 1;
-      curSeasonIdx = (curSeasonIdx + 1) % 2;
-    }
-    return `${curYear}${seasons[curSeasonIdx]}`;
   }
+  return termIntToTerm(academicYear * 10 + suffix);
+}
+
+/**
+ * Returns the model benchmark transition rate for a cohort of `intakeType`
+ * arriving at `calTerm` at duration `d` (`terms_since_start`).
+ */
+function getStepModelRate(
+  intakeType: IntakeType,
+  calTerm: string,
+  d: number,
+  termsPerYear: number,
+  ratesVec: number[],
+  excludeCovid: boolean
+): number {
+  if (d <= 0) return 1.0;
+  if (termsPerYear === 2) {
+    return ratesVec[Math.min(ratesVec.length - 1, d - 1)] ?? 0.312;
+  }
+
+  // On 3-term MCM, d === 12 is post-graduation 5th year (after 8 Fall/Spring semesters)
+  if (d >= 12) {
+    return ratesVec[11] ?? 0.263;
+  }
+
+  if (calTerm.endsWith('SU')) {
+    const yrIdx = Math.min(3, Math.floor((d - 1) / 3));
+    return ratesVec[yrIdx * 3 + 1] ?? 0.271;
+  }
+
+  if (calTerm.endsWith('FA')) {
+    if (intakeType === 'summer' && d === 1) {
+      // Summer starter's very first Fall transition (SU -> FA, d=0 -> d=1)
+      return excludeCovid ? 112 / 120 : 0.91;
+    }
+    const fallIdx = Math.min(2, Math.floor((d - 2) / 3));
+    return ratesVec[fallIdx * 3 + 2] ?? 0.859;
+  }
+
+  // Spring term (FA -> SP)
+  const spIdx = Math.min(3, Math.floor((d - 1) / 3));
+  return ratesVec[spIdx * 3] ?? 0.887;
+}
+
+export interface ProjectedCohortCell {
+  calendarTerm: string;
+  termInt: number;
+  heads: number;
+  refDuration: number;
+  refTerm: string;
+  refHeads: number;
+  stepRate: number;
+  cumRate: number;
+  isProjected: boolean;
 }
 
 export const CohortMatrixInspector: React.FC<CohortMatrixInspectorProps> = ({
@@ -222,22 +487,34 @@ export const CohortMatrixInspector: React.FC<CohortMatrixInspectorProps> = ({
   const [springOffset, setSpringOffset] = useState<1 | 2>(2);
   const [excludeCovid, setExcludeCovid] = useState<boolean>(true);
   const [selectedCensus, setSelectedCensus] =
-    useState<CensusTargetTerm>('2026SP');
-  const [selectedCohort, setSelectedCohort] = useState<string>('2025FA');
-  const [chartMode, setChartMode] = useState<RightChartMode>('rollup');
+    useState<CensusTargetTerm>('2025FA');
+  const [selectedCohort, setSelectedCohort] = useState<string>('2024FA');
+  const [intakeFilter, setIntakeFilter] =
+    useState<'all' | 'fall' | 'spring' | 'summer'>('all');
 
-  const termsPerYear = school === 'MCM' ? 3 : 2;
+  const schoolConfig = SITE_DATA.entrant.schools[school];
+  const termsPerYear = schoolConfig.terms_per_year;
   const effectiveOffset: 1 | 2 = school === 'MCM' ? springOffset : 1;
-  const ntrPerStudent = school === 'MCM' ? 19026 : 19138; // Gross - Grant + Comp Fee per term
+
+  // Derive net tuition revenue per student-term directly from siteData.json school config
+  // so Section 2 and Section 3 use the exact same NTR/student-term ($19,025 MCM / $19,138 MCC)
+  const ntrPerStudent = Math.round(
+    schoolConfig.charge_per_term * (1 - schoolConfig.aid_rate) +
+      (schoolConfig.comp_fee_per_term ?? 0)
+  );
+
+  // Target Census Terms sorted chronologically by R/Positron integer `term_int`
+  // Academic year starts in Summer: 2025SU (20251) -> 2025FA (20252) -> 2026SP (20253) -> 2026SU (20261) -> 2026FA (20262)
   const availableTerms: CensusTargetTerm[] =
     school === 'MCM'
-      ? ['2025FA', '2026SP', '2026SU', '2026FA']
+      ? ['2025SU', '2025FA', '2026SP', '2026SU', '2026FA']
       : ['2025FA', '2026SP', '2026FA'];
 
   const activeCensus: CensusTargetTerm = availableTerms.includes(selectedCensus)
     ? selectedCensus
-    : '2026SP';
+    : '2025FA';
 
+  const baselineRates = TRANSITION_RATES[school].noCovid;
   const activeRates = excludeCovid
     ? TRANSITION_RATES[school].noCovid
     : TRANSITION_RATES[school].withCovid;
@@ -250,7 +527,6 @@ export const CohortMatrixInspector: React.FC<CohortMatrixInspectorProps> = ({
     0.0
   );
 
-  // Also build the naive offset=1 curve for MCM so users can see the exact comparison on the survival chart
   const { survivalCurve: naiveOffset1Curve } = buildCohortSurvivalCurve(
     activeRates,
     termsPerYear,
@@ -259,130 +535,260 @@ export const CohortMatrixInspector: React.FC<CohortMatrixInspectorProps> = ({
     0.0
   );
 
-  const rawCohorts = school === 'MCM' ? MCM_COHORTS : MCC_COHORTS;
+  // Sort cohorts strictly by chronological `cohort_int` ascending
+  const rawCohorts = [...(school === 'MCM' ? MCM_COHORTS : MCC_COHORTS)].sort(
+    (a, b) => termToTermInt(a.cohortTerm) - termToTermInt(b.cohortTerm)
+  );
 
-  // Project each cohort forward from its last observed term using the notebook's exact offset rule
-  const getProjectedCohortCells = (cohort: CohortHistoryDef) => {
+  const projectCohortWithRule = (
+    cohort: CohortHistoryDef,
+    offsetRule: 1 | 2,
+    covidMasked: boolean
+  ): Record<number, ProjectedCohortCell> => {
     const maxTerms = termsPerYear * 4;
-    const cells: Record<
-      number,
-      {
-        calendarTerm: string;
-        heads: number;
-        stepRate: number;
-        cumRate: number;
-        isProjected: boolean;
-      }
-    > = {};
+    const ratesForRun = covidMasked
+      ? TRANSITION_RATES[school].noCovid
+      : TRANSITION_RATES[school].withCovid;
+    const isBaselineRun =
+      covidMasked && offsetRule === (school === 'MCM' ? 2 : 1);
+
+    const cells: Record<number, ProjectedCohortCell> = {};
 
     for (let d = 0; d <= maxTerms; d++) {
-      const calTerm = stepTerm(cohort.cohortTerm, d, termsPerYear);
+      const calTerm = stepTermByInt(cohort.cohortTerm, d, termsPerYear);
+      const termInt = termToTermInt(calTerm);
       const obs = cohort.observed[d];
-      if (obs) {
-        const refIdx =
-          d === 0
-            ? 0
-            : termsPerYear === 3 && d % 3 === 0 && effectiveOffset === 2
-            ? Math.max(0, d - 2)
-            : d - 1;
-        const refHeads = cells[refIdx]?.heads ?? cohort.entrants;
-        cells[d] = {
-          calendarTerm: obs.calendarTerm,
-          heads: obs.heads,
-          stepRate: d === 0 ? 1.0 : obs.heads / Math.max(1, refHeads),
-          cumRate: obs.heads / cohort.entrants,
-          isProjected: false,
-        };
-      } else if (d === 0) {
+
+      if (d === 0) {
         cells[0] = {
-          calendarTerm: cohort.cohortTerm,
+          calendarTerm: calTerm,
+          termInt,
           heads: cohort.entrants,
+          refDuration: 0,
+          refTerm: calTerm,
+          refHeads: cohort.entrants,
           stepRate: 1.0,
           cumRate: 1.0,
-          isProjected: true,
+          isProjected: Object.keys(cohort.observed).length === 0,
+        };
+        continue;
+      }
+
+      const isFallReturnWithPriorSummer =
+        termsPerYear === 3 && calTerm.endsWith('FA') && d >= 2;
+      const baseRefIdx = isFallReturnWithPriorSummer ? d - 2 : d - 1;
+      const activeRefIdx =
+        isFallReturnWithPriorSummer && offsetRule === 2 ? d - 2 : d - 1;
+
+      const refCell = cells[activeRefIdx] ?? cells[0];
+      const refHeads = refCell.heads;
+
+      const baseModelStepRate = getStepModelRate(
+        cohort.intakeType,
+        calTerm,
+        d,
+        termsPerYear,
+        baselineRates,
+        true
+      );
+      const activeModelStepRate = getStepModelRate(
+        cohort.intakeType,
+        calTerm,
+        d,
+        termsPerYear,
+        ratesForRun,
+        covidMasked
+      );
+
+      if (obs) {
+        const obsBaseRefHeads =
+          baseRefIdx === 0
+            ? cohort.entrants
+            : cohort.observed[baseRefIdx]?.heads ?? cohort.entrants;
+        const obsStepRate = obs.heads / Math.max(1, obsBaseRefHeads);
+
+        const covidScale =
+          baseModelStepRate > 0 ? activeModelStepRate / baseModelStepRate : 1.0;
+        const targetStepRate = Math.min(
+          1.0,
+          Math.max(0, obsStepRate * covidScale)
+        );
+
+        const heads = isBaselineRun
+          ? obs.heads
+          : Math.round(refHeads * targetStepRate);
+
+        cells[d] = {
+          calendarTerm: obs.calendarTerm,
+          termInt,
+          heads,
+          refDuration: activeRefIdx,
+          refTerm: refCell.calendarTerm,
+          refHeads,
+          stepRate: refHeads > 0 ? heads / refHeads : targetStepRate,
+          cumRate: heads / cohort.entrants,
+          isProjected: false,
         };
       } else {
-        const rate = activeRates[d - 1] ?? 0;
-        const isFallReturn = termsPerYear === 3 && d % 3 === 0;
-        const refIdx =
-          isFallReturn && effectiveOffset === 2 ? Math.max(0, d - 2) : d - 1;
-        const refHeads = cells[refIdx]?.heads ?? 0;
-        const projHeads = Math.round(refHeads * rate);
+        const heads = Math.round(refHeads * activeModelStepRate);
         cells[d] = {
           calendarTerm: calTerm,
-          heads: projHeads,
-          stepRate: rate,
-          cumRate: projHeads / cohort.entrants,
+          termInt,
+          heads,
+          refDuration: activeRefIdx,
+          refTerm: refCell.calendarTerm,
+          refHeads,
+          stepRate: refHeads > 0 ? heads / refHeads : activeModelStepRate,
+          cumRate: heads / cohort.entrants,
           isProjected: true,
         };
       }
     }
+
     return cells;
   };
 
   const cohortColumns = rawCohorts.map((c) => ({
     ...c,
-    cells: getProjectedCohortCells(c),
+    cohortInt: termToTermInt(c.cohortTerm),
+    cells: projectCohortWithRule(c, effectiveOffset, excludeCovid),
+    offset2Cells: projectCohortWithRule(
+      c,
+      school === 'MCM' ? 2 : 1,
+      excludeCovid
+    ),
+    offset1Cells: projectCohortWithRule(c, 1, excludeCovid),
   }));
 
-  const getContributorsForTerm = (term: CensusTargetTerm) => {
+  const extractContributors = (
+    term: CensusTargetTerm,
+    cellSelector: (
+      col: (typeof cohortColumns)[number]
+    ) => Record<number, ProjectedCohortCell>
+  ) => {
     const list: {
       cohortTerm: string;
+      cohortInt: number;
       entrants: number;
       duration: number;
       heads: number;
+      refDuration: number;
+      refTerm: string;
+      refHeads: number;
       stepRate: number;
       cumRate: number;
       ntrM: number;
       color: string;
+      intakeType: IntakeType;
+      standingLabel: string;
       isProjected: boolean;
     }[] = [];
 
     for (const col of cohortColumns) {
-      for (const [dStr, cell] of Object.entries(col.cells)) {
+      const cellMap = cellSelector(col);
+      for (const [dStr, cell] of Object.entries(cellMap)) {
         if (cell.calendarTerm === term && cell.heads > 0) {
           list.push({
             cohortTerm: col.cohortTerm,
+            cohortInt: col.cohortInt,
             entrants: col.entrants,
             duration: Number(dStr),
             heads: cell.heads,
+            refDuration: cell.refDuration,
+            refTerm: cell.refTerm,
+            refHeads: cell.refHeads,
             stepRate: cell.stepRate,
             cumRate: cell.cumRate,
             ntrM: (cell.heads * ntrPerStudent) / 1e6,
             color: col.color,
+            intakeType: col.intakeType,
+            standingLabel: col.standingLabel,
             isProjected: cell.isProjected,
           });
         }
       }
     }
-    return list;
+    return list.sort((a, b) => a.cohortInt - b.cohortInt);
   };
 
-  const activeContributors = getContributorsForTerm(activeCensus);
+  const allActiveCensusContributors = extractContributors(
+    activeCensus,
+    (col) => col.cells
+  );
+
+  const activeContributors =
+    intakeFilter === 'all'
+      ? allActiveCensusContributors
+      : allActiveCensusContributors.filter(
+          (c) => c.intakeType === intakeFilter
+        );
+
   const totalCensusHeads = activeContributors.reduce(
     (sum, c) => sum + c.heads,
     0
   );
   const totalCensusNtrM = (totalCensusHeads * ntrPerStudent) / 1e6;
 
-  const termSummaries = availableTerms.map((t) => {
-    const items = getContributorsForTerm(t);
-    const totalHeads = items.reduce((s, x) => s + x.heads, 0);
-    const totalNtrM = (totalHeads * ntrPerStudent) / 1e6;
-    return { term: t, items, totalHeads, totalNtrM };
-  });
+  // Also compute offset=2 vs offset=1 totals on activeCensus for direct comparison
+  const offset2Contributors = extractContributors(
+    activeCensus,
+    (col) => col.offset2Cells
+  ).filter((c) => intakeFilter === 'all' || c.intakeType === intakeFilter);
+  const offset1Contributors = extractContributors(
+    activeCensus,
+    (col) => col.offset1Cells
+  ).filter((c) => intakeFilter === 'all' || c.intakeType === intakeFilter);
 
-  const maxTermNtrM = Math.max(
-    15,
-    Math.ceil(Math.max(...termSummaries.map((t) => t.totalNtrM)) * 1.15)
+  const offset2TotalHeads = offset2Contributors.reduce(
+    (s, c) => s + c.heads,
+    0
   );
+  const offset1TotalHeads = offset1Contributors.reduce(
+    (s, c) => s + c.heads,
+    0
+  );
+  const offsetHeadDiff = offset1TotalHeads - offset2TotalHeads;
+  const offsetNtrDiffM = (offsetHeadDiff * ntrPerStudent) / 1e6;
 
   const focusedContributor =
     activeContributors.find((c) => c.cohortTerm === selectedCohort) ||
-    activeContributors[activeContributors.length - 1];
+    activeContributors[activeContributors.length - 1] ||
+    activeContributors[0];
 
   const year2FallRate = (survivalCurve[termsPerYear] ?? 0) * 100;
   const naiveYear2FallRate = (naiveOffset1Curve[termsPerYear] ?? 0) * 100;
+
+  // Filtered cohorts for the Stage 2 Registration Triangle table
+  const triangleCohorts =
+    intakeFilter === 'all'
+      ? cohortColumns
+      : cohortColumns.filter((c) => c.intakeType === intakeFilter);
+
+  const maxDurationSteps = termsPerYear * 4;
+  const durationIndices = Array.from(
+    { length: maxDurationSteps + 1 },
+    (_, i) => i
+  );
+
+  const handleSelectCohortAndSyncTerm = (cohortTerm: string) => {
+    setSelectedCohort(cohortTerm);
+    const inCurrent = activeContributors.some(
+      (c) => c.cohortTerm === cohortTerm
+    );
+    if (!inCurrent) {
+      const col = cohortColumns.find((c) => c.cohortTerm === cohortTerm);
+      if (col) {
+        const matchingTerm = availableTerms.find((t) =>
+          Object.values(col.cells).some(
+            (cell) => cell.calendarTerm === t && cell.heads > 0
+          )
+        );
+        if (matchingTerm) {
+          setSelectedCensus(matchingTerm);
+        }
+      }
+    }
+  };
 
   return (
     <section data-section="inspector" className="scroll-mt-20">
@@ -394,92 +800,96 @@ export const CohortMatrixInspector: React.FC<CohortMatrixInspectorProps> = ({
       </div>
 
       <h2 className="font-serif font-normal text-[24px] md:text-[28px] leading-[1.15] tracking-[-0.3px] mt-1.5 text-[#1b1c18]">
-        Interactive Cohort Roll-Up &amp; Return-Rate Inspector
+        Longitudinal Cohort Matrix &amp; Diagonal Census Highlight ({activeCensus}{' '}
+        · term_int {termToTermInt(activeCensus)})
       </h2>
 
       <p className="text-[13.5px] leading-[1.55] text-[#54564c] mt-1.5 max-w-[68ch]">
-        Inspect how longitudinal student cohorts (tracked by unique aliased{' '}
-        <code className="font-mono text-[12px]">student_id</code> across integer
-        term indices) progress across terms. Toggle{' '}
-        <strong>Spring-to-Fall Offset = 2</strong> vs.{' '}
+        Inspect how longitudinal student cohorts (sorted chronologically by
+        integer <code className="font-mono text-[12px]">cohort_int</code>:
+        Summer <code className="font-mono text-[12px]">YYYY1</code>, Fall{' '}
+        <code className="font-mono text-[12px]">YYYY2</code>, Spring{' '}
+        <code className="font-mono text-[12px]">(YYYY−1)3</code>) progress
+        across elapsed terms <code className="font-mono text-[12px]">d</code>.
+        Toggle <strong>Spring-to-Fall Offset = 2</strong> vs.{' '}
         <strong>Naive Offset = 1</strong> on MCM to see why optional Summer
         sessions (<code className="font-mono text-[12px]">13.3%</code> uptake)
         must not be chained into returning Fall headcount.
       </p>
 
-      <InteractiveSplitPanel
-        controls={
-          <>
-            {/* School Calendar Toggle */}
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-              <div className="flex flex-wrap gap-1.5">
-                {(['MCM', 'MCC'] as SchoolCode[]).map((sKey) => {
-                  const on = school === sKey;
-                  return (
-                    <button
-                      key={sKey}
-                      type="button"
-                      onClick={() => {
-                        setSchool(sKey);
-                        if (sKey === 'MCC' && selectedCensus === '2026SU') {
-                          setSelectedCensus('2026FA');
-                        }
-                      }}
-                      className="cursor-pointer text-[12px] font-bold px-3 py-1.5 rounded-[6px] border transition-all duration-150"
-                      style={{
-                        backgroundColor: on ? accent : '#faf8f2',
-                        color: on ? '#fff' : '#44453a',
-                        borderColor: on ? accent : '#d8d6cc',
-                      }}
-                    >
-                      {sKey === 'MCM'
-                        ? 'MCM · Millbury College of Music (3 Terms/Yr)'
-                        : 'MCC · Millbury College Conservatory (2 Terms/Yr)'}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* COVID Masking Toggle */}
-              <button
-                type="button"
-                onClick={() => setExcludeCovid(!excludeCovid)}
-                className="cursor-pointer text-[11px] font-mono font-bold px-2.5 py-1 rounded-[5px] border transition-colors"
-                style={{
-                  backgroundColor: excludeCovid ? '#faf8f2' : '#fff3eb',
-                  color: excludeCovid ? accent : '#b06a3a',
-                  borderColor: excludeCovid ? accent : '#b06a3a',
-                }}
-              >
-                {excludeCovid
-                  ? 'COVID Masked (Excl. 2020FA–2021SU)'
-                  : 'All Historical Terms (Incl. COVID)'}
-              </button>
+      {/* STAGE 2 COHORT REGISTRATION TRIANGLE (cohort_int x terms_since_start d) */}
+      <div className="border border-[#e3e1d9] rounded-[10px] p-4 md:p-5 bg-white/85 mt-3.5">
+        {/* Interactive Controls Bar */}
+        <div className="pb-3 mb-3 border-b border-[#e6e4dc] space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {(['MCM', 'MCC'] as SchoolCode[]).map((sKey) => {
+                const on = school === sKey;
+                const sTooltip =
+                  sKey === 'MCM'
+                    ? 'MCM · Millbury College of Music: 3-term academic calendar (Fall, Spring, Optional Summer · INCLUDE_SUMMER = True · Spring-to-Fall offset = 2). Net Tuition Revenue = $19,025 / student-term ($26,380 Gross − $8,555 Grant + $1,200 Fee).'
+                    : 'MCC · Millbury College Conservatory: 2-term academic calendar (Fall & Spring only · INCLUDE_SUMMER = False · Spring-to-Fall offset = 1). Net Tuition Revenue = $19,138 / student-term ($25,880 Gross − $7,492 Grant + $750 Fee).';
+                return (
+                  <button
+                    key={sKey}
+                    type="button"
+                    onClick={() => {
+                      setSchool(sKey);
+                      if (
+                        sKey === 'MCC' &&
+                        (selectedCensus === '2025SU' ||
+                          selectedCensus === '2026SU')
+                      ) {
+                        setSelectedCensus('2025FA');
+                      }
+                      if (sKey === 'MCC' && intakeFilter === 'summer') {
+                        setIntakeFilter('all');
+                      }
+                    }}
+                    title={sTooltip}
+                    aria-label={sTooltip}
+                    className="cursor-pointer text-[12px] font-bold px-3 py-1.5 rounded-[6px] border transition-all duration-150"
+                    style={{
+                      backgroundColor: on ? accent : '#faf8f2',
+                      color: on ? '#fff' : '#44453a',
+                      borderColor: on ? accent : '#d8d6cc',
+                    }}
+                  >
+                    {sKey === 'MCM'
+                      ? 'MCM · 3 Terms/Yr'
+                      : 'MCC · 2 Terms/Yr'}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Spring-to-Fall Offset Rule Selector (for MCM 3-term calendar) */}
-            {school === 'MCM' && (
-              <div className="flex flex-wrap items-center justify-between gap-2 py-2 px-2.5 mb-2 rounded-[6px] bg-[#faf8f2] border border-[#e6e4dc]">
-                <span className="text-[11px] font-bold text-[#44453a]">
-                  Fall Return Conditioning Rule:
-                </span>
-                <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {school === 'MCM' && (
+                <div className="flex items-center gap-1 bg-[#faf8f2] px-2 py-1 rounded-[5px] border border-[#e6e4dc]">
+                  <span
+                    className="text-[10.5px] font-bold text-[#44453a] mr-1 border-b border-dotted border-[#8a887e] cursor-help"
+                    title="Determines which prior term serves as the conditioning denominator for returning Fall enrollment on a 3-term academic calendar (Spring d−2 vs. Summer d−1)."
+                  >
+                    Fall Return:
+                  </span>
                   <button
                     type="button"
                     onClick={() => setSpringOffset(2)}
-                    className="cursor-pointer text-[11px] font-mono font-bold px-2.5 py-1 rounded border transition-colors"
+                    title={`Spring-to-Fall Conditioning (offset = 2): Returning Fall headcount at elapsed step d is conditioned on prior Spring enrollment (d−2), bypassing optional Summer (13.3% uptake). Yields ${year2FallRate.toFixed(1)}% Year-2 Fall retention.`}
+                    className="cursor-pointer text-[10.5px] font-mono font-bold px-2 py-0.5 rounded border transition-colors"
                     style={{
                       backgroundColor: springOffset === 2 ? accent : '#fff',
                       color: springOffset === 2 ? '#fff' : '#44453a',
                       borderColor: springOffset === 2 ? accent : '#d5d2c6',
                     }}
                   >
-                    offset = 2 (Spring → Fall: {year2FallRate.toFixed(1)}% Yr 2)
+                    offset = 2 ({year2FallRate.toFixed(1)}% Yr 2)
                   </button>
                   <button
                     type="button"
                     onClick={() => setSpringOffset(1)}
-                    className="cursor-pointer text-[11px] font-mono font-bold px-2.5 py-1 rounded border transition-colors"
+                    title={`Naive 1-Step Chain (offset = 1): Conditions returning Fall headcount on optional Summer enrollment (d−1 = 13.3%), treating Summer non-attendance as permanent drop-out and collapsing Year-2 Fall retention to ${naiveYear2FallRate.toFixed(1)}%.`}
+                    className="cursor-pointer text-[10.5px] font-mono font-bold px-2 py-0.5 rounded border transition-colors"
                     style={{
                       backgroundColor:
                         springOffset === 1 ? '#b06a3a' : '#fff',
@@ -488,565 +898,407 @@ export const CohortMatrixInspector: React.FC<CohortMatrixInspectorProps> = ({
                         springOffset === 1 ? '#b06a3a' : '#d5d2c6',
                     }}
                   >
-                    offset = 1 Naive (Summer → Fall:{' '}
-                    {naiveYear2FallRate.toFixed(1)}% Yr 2)
+                    offset = 1 Naive ({naiveYear2FallRate.toFixed(1)}% Yr 2)
                   </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="font-serif text-[13px] italic text-[#54564c] leading-[1.45]">
-              {school === 'MCM'
-                ? springOffset === 2
-                  ? 'Authentic Positron IDE offset = 2 rule: 95.9% of Fall starters enroll in Spring, 13.3% take optional Summer courses, and 89.8% of Spring students return in Fall (86.1% Year-2 Fall retention).'
-                  : 'Naive offset = 1 chain bug: multiplying Fall → Spring (95.9%) × Spring → Summer (13.3%) × Summer → Fall (89.8%) falsely treats optional Summer non-attendance as permanent dropout, collapsing Year-2 Fall retention to 11.5%!'
-                : 'MCC · Millbury College Conservatory 2-term calendar (Fall & Spring only, INCLUDE_SUMMER = False, offset = 1): 95.3% return in Spring and 89.9% of Spring students return in Year-2 Fall (85.7% Year-2 Fall retention).'}
+              <button
+                type="button"
+                onClick={() => setExcludeCovid(!excludeCovid)}
+                title={
+                  excludeCovid
+                    ? 'Post-COVID Baseline: Excludes 2020FA, 2021SP, and 2021SU remote-instruction transition rates when estimating baseline term-to-term continuation.'
+                    : 'All Historical Terms: Includes 2020FA–2021SU pandemic-era enrollment transitions in the empirical survival vector.'
+                }
+                className="cursor-pointer text-[11px] font-mono font-bold px-2.5 py-1 rounded-[5px] border transition-colors"
+                style={{
+                  backgroundColor: excludeCovid ? '#faf8f2' : '#fff3eb',
+                  color: excludeCovid ? accent : '#b06a3a',
+                  borderColor: excludeCovid ? accent : '#b06a3a',
+                }}
+              >
+                {excludeCovid ? 'COVID Masked' : 'Incl. COVID Terms'}
+              </button>
             </div>
+          </div>
 
-            {/* Census Term Selector */}
-            <div className="flex flex-wrap items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-[#eeece4]">
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.6px] text-[#6f6d64]">
-                Target Census Term:
-              </span>
-              <div className="flex items-center gap-1.5">
-                {availableTerms.map((t) => {
-                  const on = activeCensus === t;
+          {/* Census Term Selector & Intake Filter + Legend */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#efede6]">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#6f6d64] border-b border-dotted border-[#8a887e] cursor-help"
+                  title="Select the target census term to highlight along the diagonal of the cohort registration triangle (where cohort_int + d maps to term_int)."
+                >
+                  Census Diagonal:
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {availableTerms.map((t) => {
+                    const on = activeCensus === t;
+                    const tInt = termToTermInt(t);
+                    const isObs = t === '2025SU' || t === '2025FA';
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setSelectedCensus(t)}
+                        className="cursor-pointer font-mono text-[11px] font-bold px-2 py-0.5 rounded-[4px] border transition-colors"
+                        style={{
+                          backgroundColor: on ? accent : '#faf8f2',
+                          color: on ? '#fff' : '#1b1c18',
+                          borderColor: on ? accent : '#d5d2c6',
+                        }}
+                        title={`Census Term ${t} | Integer term_int = ${tInt} (YYYY1=Summer, YYYY2=Fall, (YYYY−1)3=Spring) | ${isObs ? 'Observed historical census' : `Projected census (offset = ${effectiveOffset})`}`}
+                      >
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1">
+                <span
+                  className="text-[10px] font-bold uppercase tracking-[0.4px] text-[#6f6d64] mr-0.5 border-b border-dotted border-[#8a887e] cursor-help"
+                  title="Filter cohorts by entry term season (Fall, Spring, or Summer matriculants) to inspect each intake stream's contribution to census headcount and NTR."
+                >
+                  Intake:
+                </span>
+                {(
+                  [
+                    {
+                      id: 'all',
+                      label: 'All Starts',
+                      tip: 'Include all Fall, Spring, and Summer entering cohorts active in the selected census term.',
+                    },
+                    {
+                      id: 'fall',
+                      label: 'Fall',
+                      tip: 'Filter to Fall entering cohorts (term_int ending in 2, e.g., 2022FA = 20222).',
+                    },
+                    {
+                      id: 'spring',
+                      label: 'Spring',
+                      tip: 'Filter to Spring entering cohorts (term_int ending in 3, e.g., 2023SP = 20223).',
+                    },
+                    ...(school === 'MCM'
+                      ? [
+                          {
+                            id: 'summer' as const,
+                            label: 'Summer',
+                            tip: 'Filter to Summer entering cohorts on the 3-term MCM calendar (term_int ending in 1, e.g., 2025SU = 20251).',
+                          },
+                        ]
+                      : []),
+                  ] as const
+                ).map((tab) => {
+                  const on = intakeFilter === tab.id;
                   return (
                     <button
-                      key={t}
+                      key={tab.id}
                       type="button"
-                      onClick={() => setSelectedCensus(t)}
-                      className="cursor-pointer font-mono text-[11.5px] font-bold px-2.5 py-1 rounded-[5px] border transition-colors"
+                      onClick={() => setIntakeFilter(tab.id)}
+                      title={tab.tip}
+                      className="cursor-pointer text-[10.5px] font-sans font-bold px-2 py-0.5 rounded-[4px] border transition-colors"
                       style={{
                         backgroundColor: on ? accent : '#faf8f2',
-                        color: on ? '#fff' : '#1b1c18',
+                        color: on ? '#fff' : '#44453a',
                         borderColor: on ? accent : '#d5d2c6',
                       }}
                     >
-                      {t}
+                      {tab.label}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </>
-        }
-        kpiStrip={
-          <>
-            <div>
-              <div className="text-[10.5px] text-[#6f6d64] font-bold uppercase tracking-[0.5px]">
-                Fall Cohort Headcount ({activeCensus})
-              </div>
-              <div className="text-[22px] font-extrabold tracking-tight text-[#1b1c18] mt-0.5 leading-none font-mono tabular-nums">
-                {totalCensusHeads.toLocaleString('en-US')}
-                <span className="text-[12px] font-normal text-[#8a887e] ml-1">
-                  students
-                </span>
-              </div>
-              <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
-                {activeContributors.length} Fall entry cohorts enrolled
-              </div>
-            </div>
 
-            <div>
-              <div className="text-[10.5px] text-[#6f6d64] font-bold uppercase tracking-[0.5px]">
-                Term Net Tuition Revenue
-              </div>
-              <div
-                className="text-[22px] font-extrabold tracking-tight mt-0.5 leading-none font-mono tabular-nums"
-                style={{
-                  color:
-                    school === 'MCM' && springOffset === 1 ? '#b06a3a' : accent,
-                }}
+            {/* Compact Matrix Legend with Tooltips */}
+            <div className="flex flex-wrap items-center gap-2.5 text-[10.5px] font-mono text-[#54564c]">
+              <span
+                className="inline-flex items-center gap-1.5 cursor-help border-b border-dotted border-[#c8c6bc]"
+                title={`Cells highlighted in green belong to the active ${activeCensus} census diagonal (term_int = ${termToTermInt(activeCensus)}). Summing these cells produces the ${totalCensusHeads.toLocaleString('en-US')} census headcount ($${totalCensusNtrM.toFixed(2)}M NTR).`}
               >
-                ${totalCensusNtrM.toFixed(2)}
-                <span className="text-[13px] text-[#8a887e] ml-0.5">M</span>
-              </div>
-              <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
-                {totalCensusHeads.toLocaleString('en-US')} × $
-                {ntrPerStudent.toLocaleString('en-US')}/term
-              </div>
-            </div>
-          </>
-        }
-        summaryTable={
-          <>
-            <div className="flex items-center justify-between text-[10.5px] font-sans text-[#6f6d64] mb-1.5">
-              <span className="font-bold uppercase tracking-[0.5px]">
-                Cohort Roll-Up in {activeCensus} (Click class to inspect)
-              </span>
-              <span>
-                Term NTR/St = ${ntrPerStudent.toLocaleString('en-US')}
-              </span>
-            </div>
-            <div className="grid grid-cols-[62px_54px_1fr_1fr_1fr] gap-1 text-[#8a887e] font-sans font-bold text-[10.5px] pb-1 border-b border-[#e3e1d9]">
-              <span>Cohort</span>
-              <span>Step</span>
-              <span className="text-right">Step Rate</span>
-              <span className="text-right">Heads</span>
-              <span className="text-right">Term NTR</span>
-            </div>
-            {activeContributors.map((c) => {
-              const isSelected = focusedContributor?.cohortTerm === c.cohortTerm;
-              return (
-                <button
-                  key={c.cohortTerm}
-                  type="button"
-                  onClick={() => setSelectedCohort(c.cohortTerm)}
-                  onMouseEnter={() => setSelectedCohort(c.cohortTerm)}
-                  className="w-full text-left grid grid-cols-[62px_54px_1fr_1fr_1fr] gap-1 py-1.5 px-1.5 rounded-[4px] border-b border-[#f4f2ea] transition-colors cursor-pointer"
+                <span
+                  className="w-2.5 h-2.5 rounded-[2px] inline-block border"
                   style={{
-                    backgroundColor: isSelected
-                      ? `color-mix(in srgb, ${accent} 10%, #fff)`
-                      : 'transparent',
+                    backgroundColor: `color-mix(in srgb, ${accent} 16%, #fff)`,
+                    borderColor: accent,
                   }}
-                >
-                  <span className="font-bold text-[#1b1c18] flex items-center gap-1.5">
-                    <span
-                      className="w-2 h-2 rounded-full inline-block shrink-0"
-                      style={{ backgroundColor: c.color }}
-                    />
-                    {c.cohortTerm}
-                  </span>
-                  <span className="text-[#6f6d64]">
-                    t+{c.duration} {c.isProjected ? '(proj)' : ''}
-                  </span>
-                  <span className="text-right text-[#54564c]">
-                    {c.duration === 0
-                      ? '100.0%'
-                      : `${(c.stepRate * 100).toFixed(1)}%`}
-                  </span>
-                  <span className="text-right font-semibold text-[#1b1c18]">
-                    {c.heads.toLocaleString('en-US')}
-                  </span>
-                  <span
-                    className="text-right font-bold"
-                    style={{ color: isSelected ? accent : '#1b1c18' }}
-                  >
-                    ${c.ntrM.toFixed(2)}M
-                  </span>
-                </button>
-              );
-            })}
-            {/* Total Census Row */}
-            <div className="grid grid-cols-[62px_54px_1fr_1fr_1fr] gap-1 py-1.5 px-1.5 border-t border-[#d5d2c6] font-bold text-[#1b1c18] bg-[#faf8f2]/80">
-              <span className="font-sans">Total</span>
-              <span className="text-[#6f6d64]">{activeCensus}</span>
-              <span className="text-right text-[#6f6d64]">
-                offset={effectiveOffset}
+                />
+                Diagonal ({activeCensus})
               </span>
-              <span className="text-right">
-                {totalCensusHeads.toLocaleString('en-US')}
+              <span
+                className="inline-flex items-center gap-1.5 cursor-help border-b border-dotted border-[#c8c6bc]"
+                title="Historical census enrollments observed through 2025FA."
+              >
+                <span className="w-2.5 h-2.5 rounded-[2px] inline-block bg-white border border-[#d5d2c6]" />
+                Observed
               </span>
-              <span className="text-right" style={{ color: accent }}>
-                ${totalCensusNtrM.toFixed(2)}M
+              <span
+                className="inline-flex items-center gap-1.5 cursor-help border-b border-dotted border-[#c8c6bc]"
+                title={`Future terms projected beyond 2025FA using conditional step rates with Spring-to-Fall offset = ${effectiveOffset}.`}
+              >
+                <span className="w-2.5 h-2.5 rounded-[2px] inline-block bg-[#faf8f2] border border-dashed border-[#c8c6bc]" />
+                Projected (off={effectiveOffset})
               </span>
             </div>
-          </>
-        }
-        chartTitle={
-          chartMode === 'rollup'
-            ? `Census Cohort Roll-Up (${school} · $M Term NTR)`
-            : `4-Year Cohort Persistence & Historical Spread (${school})`
-        }
-        chartHeaderRight={
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setChartMode('rollup')}
-              className="cursor-pointer font-sans text-[10.5px] font-bold px-2 py-0.5 rounded border transition-colors"
-              style={{
-                backgroundColor: chartMode === 'rollup' ? accent : '#faf8f2',
-                color: chartMode === 'rollup' ? '#fff' : '#54564c',
-                borderColor: chartMode === 'rollup' ? accent : '#d8d6cc',
-              }}
-            >
-              Census Roll-Up
-            </button>
-            <button
-              type="button"
-              onClick={() => setChartMode('survival')}
-              className="cursor-pointer font-sans text-[10.5px] font-bold px-2 py-0.5 rounded border transition-colors"
-              style={{
-                backgroundColor: chartMode === 'survival' ? accent : '#faf8f2',
-                color: chartMode === 'survival' ? '#fff' : '#54564c',
-                borderColor: chartMode === 'survival' ? accent : '#d8d6cc',
-              }}
-            >
-              4-Yr Retention &amp; Spread
-            </button>
           </div>
-        }
-        svgChart={
-          chartMode === 'rollup' ? (
-            <svg
-              viewBox="0 0 420 240"
-              className="w-full h-auto select-none"
-              role="img"
-              aria-label="Stacked cohort roll-up bar chart by census term"
-            >
-              {/* Grid lines */}
-              <g stroke="#ecebe3" strokeWidth="1">
-                <line x1="48" y1="34" x2="404" y2="34" />
-                <line x1="48" y1="88" x2="404" y2="88" />
-                <line x1="48" y1="142" x2="404" y2="142" />
-                <line x1="48" y1="196" x2="404" y2="196" />
-              </g>
+        </div>
 
-              {/* Axes */}
-              <line
-                x1="48"
-                y1="20"
-                x2="48"
-                y2="196"
-                stroke="#cdcbc1"
-                strokeWidth="1.1"
-              />
-              <line
-                x1="48"
-                y1="196"
-                x2="404"
-                y2="196"
-                stroke="#cdcbc1"
-                strokeWidth="1.1"
-              />
-
-              {/* Y-axis labels */}
-              <g
-                fill="#8a887e"
-                fontFamily="Open Sans, sans-serif"
-                fontSize="10.5"
-                textAnchor="end"
-              >
-                <text x="42" y="38">
-                  ${maxTermNtrM}M
-                </text>
-                <text x="42" y="118">
-                  ${Math.round(maxTermNtrM / 2)}M
-                </text>
-                <text x="42" y="200">
-                  $0M
-                </text>
-              </g>
-
-              {/* Stacked bars for each census term */}
-              {termSummaries.map((ts, tIdx) => {
-                const count = termSummaries.length;
-                const slotW = 340 / count;
-                const barW = Math.min(54, slotW * 0.58);
-                const xCenter = 64 + tIdx * slotW + slotW / 2;
-                const xLeft = xCenter - barW / 2;
-                const isSelectedTerm = ts.term === activeCensus;
-
-                let yCursor = 196;
-
-                return (
-                  <g
-                    key={ts.term}
-                    className="cursor-pointer"
-                    onClick={() => setSelectedCensus(ts.term)}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[11px] font-mono tabular-nums">
+            <thead>
+              <tr className="border-b-2 border-[#1b1c18] text-[#54564c] text-[10px] uppercase">
+                <th
+                  className="py-1.5 px-2 text-left font-sans font-bold sticky left-0 bg-white z-10 cursor-help"
+                  title="Entering cohort term code sorted chronologically by integer cohort_int (hover any cohort cell to view its integer cohort_int code)"
+                >
+                  Cohort
+                </th>
+                <th
+                  className="py-1.5 px-1.5 text-left font-sans font-bold cursor-help"
+                  title="Matriculation season (fall, spring, or summer intake)"
+                >
+                  Intake
+                </th>
+                {durationIndices.map((d) => (
+                  <th
+                    key={d}
+                    className="py-1.5 px-1.5 text-right font-bold cursor-help"
+                    title={`Elapsed duration d = ${d} terms since initial cohort entry (Academic Year ${Math.floor(d / termsPerYear) + 1}, Term ${(d % termsPerYear) + 1} of ${termsPerYear})`}
                   >
-                    {isSelectedTerm && (
-                      <rect
-                        x={xLeft - 8}
-                        y="24"
-                        width={barW + 16}
-                        height="172"
-                        rx="4"
-                        fill={accent}
-                        opacity="0.07"
-                      />
-                    )}
-
-                    {ts.items.map((item) => {
-                      const h = (item.ntrM / maxTermNtrM) * 162;
-                      yCursor -= h;
-                      const isFocusedCohort =
-                        focusedContributor?.cohortTerm === item.cohortTerm;
-                      return (
-                        <rect
-                          key={item.cohortTerm}
-                          x={xLeft}
-                          y={yCursor}
-                          width={barW}
-                          height={Math.max(1.5, h)}
-                          fill={item.color}
-                          opacity={
-                            isSelectedTerm
-                              ? isFocusedCohort
-                                ? 1
-                                : 0.82
-                              : 0.55
-                          }
-                          stroke="#fff"
-                          strokeWidth="1"
-                          onMouseEnter={() =>
-                            setSelectedCohort(item.cohortTerm)
-                          }
+                    d={d}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#efede6]">
+              {triangleCohorts.map((col) => {
+                const isSelectedRow =
+                  focusedContributor?.cohortTerm === col.cohortTerm ||
+                  selectedCohort === col.cohortTerm;
+                return (
+                  <tr
+                    key={col.cohortTerm}
+                    onClick={() => handleSelectCohortAndSyncTerm(col.cohortTerm)}
+                    className="cursor-pointer hover:bg-[#faf8f2]/90 transition-colors"
+                    style={{
+                      backgroundColor: isSelectedRow
+                        ? `color-mix(in srgb, ${accent} 5%, #fff)`
+                        : undefined,
+                    }}
+                  >
+                    <td
+                      className="py-1.5 px-2 font-bold text-[#1b1c18] whitespace-nowrap sticky left-0 bg-white z-10"
+                      title={`Cohort ${col.cohortTerm} | Integer cohort_int = ${col.cohortInt} | ${col.standingLabel} | Initial entering size (d=0) = ${col.entrants.toLocaleString('en-US')} students`}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="w-2 h-2 rounded-full inline-block shrink-0"
+                          style={{ backgroundColor: col.color }}
                         />
+                        {col.cohortTerm}
+                      </span>
+                    </td>
+                    <td
+                      className="py-1.5 px-1.5 font-sans text-[10px] text-[#6f6d64] whitespace-nowrap"
+                      title={`${col.intakeType.toUpperCase()} matriculation stream (${col.standingLabel})`}
+                    >
+                      {col.intakeType}
+                    </td>
+                    {durationIndices.map((d) => {
+                      const cell = col.cells[d];
+                      if (!cell || cell.heads <= 0) {
+                        return (
+                          <td
+                            key={d}
+                            className="py-1.5 px-1.5 text-right text-[#c8c6bc]"
+                          >
+                            —
+                          </td>
+                        );
+                      }
+                      const isCensusCell = cell.calendarTerm === activeCensus;
+                      const isSelectableTerm = (
+                        availableTerms as string[]
+                      ).includes(cell.calendarTerm);
+
+                      return (
+                        <td
+                          key={d}
+                          onClick={(e) => {
+                            if (isSelectableTerm) {
+                              e.stopPropagation();
+                              setSelectedCensus(
+                                cell.calendarTerm as CensusTargetTerm
+                              );
+                              setSelectedCohort(col.cohortTerm);
+                            }
+                          }}
+                          className={`py-1 px-1.5 text-right transition-colors ${
+                            isCensusCell
+                              ? 'font-extrabold rounded-[4px]'
+                              : cell.isProjected
+                              ? 'text-[#6f6d64] italic bg-[#faf8f2]/60'
+                              : 'text-[#1b1c18]'
+                          }`}
+                          style={
+                            isCensusCell
+                              ? {
+                                  backgroundColor: `color-mix(in srgb, ${accent} 15%, #fff)`,
+                                  color:
+                                    school === 'MCM' && springOffset === 1
+                                      ? '#b06a3a'
+                                      : accent,
+                                  boxShadow: `inset 0 0 0 1.5px ${
+                                    school === 'MCM' && springOffset === 1
+                                      ? '#b06a3a'
+                                      : accent
+                                  }`,
+                                }
+                              : undefined
+                          }
+                          title={`${col.cohortTerm} [cohort_int: ${col.cohortInt}] at d=${d} -> ${cell.calendarTerm} [term_int: ${cell.termInt}]: ${cell.heads.toLocaleString('en-US')} students (${(cell.stepRate * 100).toFixed(1)}% of ${cell.refTerm} d=${cell.refDuration}; ${(cell.cumRate * 100).toFixed(1)}% of entry)`}
+                        >
+                          <div className="leading-tight">
+                            {cell.heads.toLocaleString('en-US')}
+                          </div>
+                          <div className="text-[8.5px] text-[#8a887e] font-normal leading-none mt-0.5">
+                            {cell.calendarTerm}
+                          </div>
+                        </td>
                       );
                     })}
-
-                    <text
-                      x={xCenter}
-                      y={Math.max(16, yCursor - 6)}
-                      textAnchor="middle"
-                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                      fontSize="10"
-                      fontWeight={isSelectedTerm ? '700' : '600'}
-                      fill={isSelectedTerm ? accent : '#54564c'}
-                    >
-                      ${ts.totalNtrM.toFixed(1)}M
-                    </text>
-
-                    <text
-                      x={xCenter}
-                      y="213"
-                      textAnchor="middle"
-                      fontFamily="Open Sans, sans-serif"
-                      fontSize="10.5"
-                      fontWeight={isSelectedTerm ? '700' : '400'}
-                      fill={isSelectedTerm ? '#1b1c18' : '#8a887e'}
-                    >
-                      {ts.term}
-                    </text>
-                    <text
-                      x={xCenter}
-                      y="226"
-                      textAnchor="middle"
-                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                      fontSize="9.5"
-                      fill="#6f6d64"
-                    >
-                      {ts.totalHeads} st
-                    </text>
-                  </g>
+                  </tr>
                 );
               })}
-            </svg>
-          ) : (
-            <svg
-              viewBox="0 0 420 240"
-              className="w-full h-auto select-none"
-              role="img"
-              aria-label="4-year cohort persistence curve with historical min-max spread band"
-            >
-              {/* Grid lines */}
-              <g stroke="#ecebe3" strokeWidth="1">
-                <line x1="48" y1="34" x2="404" y2="34" />
-                <line x1="48" y1="115" x2="404" y2="115" />
-                <line x1="48" y1="196" x2="404" y2="196" />
-              </g>
-              <line
-                x1="48"
-                y1="20"
-                x2="48"
-                y2="196"
-                stroke="#cdcbc1"
-                strokeWidth="1.1"
-              />
-              <line
-                x1="48"
-                y1="196"
-                x2="404"
-                y2="196"
-                stroke="#cdcbc1"
-                strokeWidth="1.1"
-              />
+            </tbody>
+          </table>
+        </div>
 
-              {/* Y labels */}
-              <g
-                fill="#8a887e"
-                fontFamily="Open Sans, sans-serif"
-                fontSize="10.5"
-                textAnchor="end"
-              >
-                <text x="42" y="38">
-                  100%
-                </text>
-                <text x="42" y="119">
-                  50%
-                </text>
-                <text x="42" y="200">
-                  0%
-                </text>
-              </g>
-
-              {(() => {
-                const maxD = survivalCurve.length - 1;
-                const X = (d: number) => 60 + (d / Math.max(1, maxD)) * 334;
-                const Y = (s: number) => 196 - s * 162;
-
-                const minC = TRANSITION_RATES[school].minCurve;
-                const maxC = TRANSITION_RATES[school].maxCurve;
-
-                const spreadTop = maxC
-                  .map((s, d) => `${X(d).toFixed(1)},${Y(s).toFixed(1)}`)
-                  .join(' L');
-                const spreadBot = [...minC]
-                  .map((s, d) => [X(d), Y(s)])
-                  .reverse()
-                  .map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`)
-                  .join(' L');
-                const spreadBandD = `M${spreadTop} L${spreadBot} Z`;
-
-                const pathD =
-                  'M' +
-                  survivalCurve
-                    .map((s, d) => `${X(d).toFixed(1)},${Y(s).toFixed(1)}`)
-                    .join(' L');
-
-                const naivePathD =
-                  'M' +
-                  naiveOffset1Curve
-                    .map((s, d) => `${X(d).toFixed(1)},${Y(s).toFixed(1)}`)
-                    .join(' L');
-
-                return (
-                  <>
-                    {/* Historical Min-Max Cohort Spread Band */}
-                    <path d={spreadBandD} fill={accent} opacity="0.14" />
-
-                    {/* Naive offset=1 reference curve on MCM */}
-                    {school === 'MCM' && (
-                      <path
-                        d={naivePathD}
-                        fill="none"
-                        stroke="#b06a3a"
-                        strokeWidth={springOffset === 1 ? 2.8 : 1.5}
-                        strokeDasharray="4 3"
-                        opacity={springOffset === 1 ? 1 : 0.75}
-                      />
-                    )}
-
-                    {/* Active survival curve */}
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke={
-                        school === 'MCM' && springOffset === 1
-                          ? '#b06a3a'
-                          : accent
-                      }
-                      strokeWidth="2.8"
-                    />
-
-                    {survivalCurve.map((s, d) => {
-                      const cx = X(d);
-                      const cy = Y(s);
-                      const isSummer = termsPerYear === 3 && d % 3 === 2;
-                      return (
-                        <g key={d}>
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r={isSummer ? 3.2 : 4.2}
-                            fill={isSummer ? '#faf8f2' : '#fff'}
-                            stroke={
-                              school === 'MCM' && springOffset === 1
-                                ? '#b06a3a'
-                                : accent
-                            }
-                            strokeWidth="2"
-                          />
-                          {d % termsPerYear === 0 && (
-                            <text
-                              x={cx}
-                              y="215"
-                              textAnchor="middle"
-                              fontFamily="Open Sans, sans-serif"
-                              fontSize="10"
-                              fill="#6f6d64"
-                            >
-                              Yr {d / termsPerYear + 1} (t+{d})
-                            </text>
-                          )}
-                          {(d === 1 || d === termsPerYear || d === termsPerYear * 2) && (
-                            <text
-                              x={cx}
-                              y={Math.max(16, cy - 8)}
-                              textAnchor="middle"
-                              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                              fontSize="9.5"
-                              fontWeight="700"
-                              fill="#1b1c18"
-                            >
-                              {(s * 100).toFixed(1)}%
-                            </text>
-                          )}
-                        </g>
-                      );
-                    })}
-                  </>
-                );
-              })()}
-            </svg>
-          )
-        }
-        chartLegend={
-          chartMode === 'rollup' ? (
-            <>
-              {cohortColumns.map((col) => (
-                <button
-                  key={col.cohortTerm}
-                  type="button"
-                  onClick={() => setSelectedCohort(col.cohortTerm)}
-                  className="cursor-pointer flex items-center gap-1.5 hover:text-[#1b1c18]"
+        {/* Bottom Matrix Audit Bar: Focused Cohort Step Formula & Offset=2 vs Offset=1 Diagonal Sum */}
+        <div className="mt-3 pt-3 border-t border-[#e6e4dc] grid grid-cols-1 lg:grid-cols-2 gap-3 text-[11px] font-sans">
+          {focusedContributor && (
+            <div className="p-2.5 rounded-[6px] bg-[#faf8f2] border border-[#e2e0d6]">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] font-bold uppercase tracking-[0.4px] text-[#6f6d64]">
+                <span
+                  className="cursor-help border-b border-dotted border-[#c8c6bc]"
+                  title={`Integer cohort_int = ${focusedContributor.cohortInt} | Initial entering size = ${focusedContributor.entrants.toLocaleString('en-US')} students`}
                 >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full inline-block"
-                    style={{ backgroundColor: col.color }}
-                  />
-                  <span
-                    className={
-                      focusedContributor?.cohortTerm === col.cohortTerm
-                        ? 'font-bold text-[#1b1c18]'
-                        : ''
-                    }
-                  >
-                    {col.cohortTerm} ({col.entrants.toLocaleString('en-US')})
-                  </span>
-                </button>
-              ))}
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-1.5">
-                <span
-                  className="w-3.5 h-[2.5px] inline-block"
-                  style={{ backgroundColor: accent }}
-                />
-                offset = 2 Spring→Fall Curve
-              </span>
-              {school === 'MCM' && (
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3.5 h-[2px] border-t-2 border-dashed border-[#b06a3a] inline-block" />
-                  offset = 1 Naive Summer Chain
+                  Focused Cohort Step Formula ·{' '}
+                  <strong className="text-[#1b1c18]">
+                    {focusedContributor.cohortTerm}
+                  </strong>{' '}
+                  ({focusedContributor.standingLabel})
                 </span>
-              )}
-              <span className="flex items-center gap-1.5">
                 <span
-                  className="w-3 h-2.5 rounded-[2px] inline-block opacity-25"
-                  style={{ backgroundColor: accent }}
-                />
-                2021FA–2024FA Historical Spread
+                  className="font-mono text-[#0d4f30] cursor-help"
+                  title={
+                    focusedContributor.duration === 0
+                      ? 'Initial matriculation term (d = 0); 100% of entering cohort is present.'
+                      : `Headcount in ${activeCensus} (d=${focusedContributor.duration}) is multiplied from reference term ${focusedContributor.refTerm} (d=${focusedContributor.refDuration}).`
+                  }
+                >
+                  {focusedContributor.duration === 0
+                    ? 'Entry Cohort (d=0)'
+                    : `Conditioned on ${focusedContributor.refTerm} (d=${focusedContributor.refDuration})`}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-[#1b1c18] mt-1 leading-[1.4]">
+                {focusedContributor.duration === 0 ? (
+                  <>
+                    Entry <strong>{focusedContributor.cohortTerm}</strong>{' '}
+                    (d=0):{' '}
+                    <strong>
+                      {focusedContributor.heads.toLocaleString('en-US')}
+                    </strong>{' '}
+                    entrants × ${ntrPerStudent.toLocaleString('en-US')} ={' '}
+                    <strong style={{ color: accent }}>
+                      ${focusedContributor.ntrM.toFixed(2)}M
+                    </strong>
+                  </>
+                ) : (
+                  <>
+                    Ref <strong>{focusedContributor.refTerm}</strong> (d=
+                    {focusedContributor.refDuration}:{' '}
+                    <strong>
+                      {focusedContributor.refHeads.toLocaleString('en-US')}
+                    </strong>{' '}
+                    st) ×{' '}
+                    <strong>
+                      {(focusedContributor.stepRate * 100).toFixed(1)}%
+                    </strong>{' '}
+                    ={' '}
+                    <strong>
+                      {focusedContributor.heads.toLocaleString('en-US')}
+                    </strong>{' '}
+                    st ({(focusedContributor.cumRate * 100).toFixed(1)}% of{' '}
+                    {focusedContributor.entrants.toLocaleString('en-US')}{' '}
+                    start) × ${ntrPerStudent.toLocaleString('en-US')} ={' '}
+                    <strong style={{ color: accent }}>
+                      ${focusedContributor.ntrM.toFixed(2)}M
+                    </strong>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="p-2.5 rounded-[6px] bg-[#faf8f2] border border-[#e2e0d6] flex flex-col justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] font-bold uppercase tracking-[0.5px] text-[#0d4f30]">
+              <span
+                className="cursor-help border-b border-dotted border-[#0d4f30]/50"
+                title={`Sums all highlighted diagonal cells where calendarTerm == ${activeCensus} (integer term_int = ${termToTermInt(activeCensus)}) across ${activeContributors.length} active cohorts.`}
+              >
+                Diagonal Census Sum · {activeCensus} ({activeContributors.length}{' '}
+                Cohorts)
               </span>
-            </>
-          )
-        }
-        chartFooterRight={
-          focusedContributor ? (
-            <>
-              {focusedContributor.cohortTerm} (t+{focusedContributor.duration}):{' '}
-              <strong>{focusedContributor.heads.toLocaleString('en-US')}</strong>{' '}
-              × ${ntrPerStudent.toLocaleString('en-US')} ={' '}
-              <strong style={{ color: accent }}>
-                ${focusedContributor.ntrM.toFixed(2)}M
-              </strong>
-            </>
-          ) : undefined
-        }
-      />
+              <span
+                className="font-mono text-[#6f6d64] bg-white px-1.5 py-0.5 rounded border border-[#e2e0d6] cursor-help"
+                title={`Stage 2 projection rule: Fall return lag offset = ${effectiveOffset} (${school})`}
+              >
+                proj_term · offset={effectiveOffset}
+              </span>
+            </div>
+            <div className="font-mono text-[11px] text-[#54564c] mt-1 flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <strong className="text-[#1b1c18] text-[13px]">
+                  {totalCensusHeads.toLocaleString('en-US')} students
+                </strong>{' '}
+                × ${ntrPerStudent.toLocaleString('en-US')}/term ={' '}
+                <strong
+                  className="text-[13px]"
+                  style={{
+                    color:
+                      school === 'MCM' && springOffset === 1
+                        ? '#b06a3a'
+                        : accent,
+                  }}
+                >
+                  ${totalCensusNtrM.toFixed(2)}M
+                </strong>
+              </div>
+              {school === 'MCM' && (
+                <div
+                  className="text-[10px] cursor-help"
+                  title="Direct comparison between Spring-to-Fall conditioning (offset = 2) and naive Summer-to-Fall chaining (offset = 1) on the selected census diagonal"
+                >
+                  offset=2:{' '}
+                  <strong>{offset2TotalHeads.toLocaleString('en-US')}</strong>{' '}
+                  vs. offset=1:{' '}
+                  <strong className="text-[#b06a3a]">
+                    {offset1TotalHeads.toLocaleString('en-US')} st (Δ{' '}
+                    {offsetHeadDiff.toLocaleString('en-US')} / −$
+                    {Math.abs(offsetNtrDiffM).toFixed(2)}M)
+                  </strong>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 };

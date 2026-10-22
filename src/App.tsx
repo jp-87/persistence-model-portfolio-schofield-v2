@@ -53,8 +53,8 @@ export const App: React.FC = () => {
   };
 
   const T = {
-    hero: `Two-stage Higher Education enrollment and Net Tuition Revenue (NTR) cohort model. Stage 1 (RStudio) links longitudinal student enrollment records across terms and classifies tuition discount rates into five financial aid tiers. Stage 2 (Positron IDE) projects four-year cohort headcount and Net Tuition Revenue across Millbury College of Music and Millbury College Conservatory.`,
-    scenarioNote: `All scenarios start from the same 2026FA baseline (3,082 students · $104.1M NTR); shaded bands show the 10th–90th percentile budget planning spread.`,
+    hero: `Two-stage Higher Education enrollment and Net Tuition Revenue (NTR) cohort survival model. Stage 1 links longitudinal student enrollment records across terms and classifies tuition discount rates into five NACUBO-style financial aid tiers. Stage 2 projects four-year cohort headcount and Net Tuition Revenue across Millbury College of Music (MCM, 3 terms/year) and Millbury College Conservatory (MCC, 2 terms/year).`,
+    scenarioNote: `All scenarios start from the same 2026FA 4-year undergraduate baseline (${D.scenarios.flat[0].headcount.toLocaleString('en-US')} students · $${D.scenarios.flat[0].ntr_m.toFixed(1)}M NTR at ~$19,050/student); shaded bands show the 10th–90th percentile empirical continuation-rate spread.`,
     calcTag: `03 · 4-Year Net Tuition Revenue & Tuition Discount Simulator`,
     calcIntro: `Adjust school calendar (MCM 3-Term vs. MCC 2-Term), entering class size, gross tuition per term, institutional grant discount rate (%), and term-to-term return rate shift to project four-year cohort headcount and Net Tuition Revenue.`,
     calcAssume: `Baseline projections use post-COVID historical term-to-term return rates (as of ${D.entrant.as_of}) with Spring-to-Fall offset = 2 on MCM and offset = 1 on MCC.`,
@@ -73,6 +73,7 @@ export const App: React.FC = () => {
         accent={accent}
         paper={paper}
         repoUrl={D.repo_url}
+        linkedinUrl={D.linkedin_url}
         published={D.published}
         onNavigate={scrollToSection}
       />
@@ -87,6 +88,7 @@ export const App: React.FC = () => {
           onNavigate={scrollToSection}
           published={D.published}
           repoUrl={D.repo_url}
+          linkedinUrl={D.linkedin_url}
         />
 
         <main className="min-w-0 flex flex-col gap-8 md:gap-10">
@@ -100,7 +102,7 @@ export const App: React.FC = () => {
             onSelectScenario={setActiveScenario}
           />
 
-          {/* 2. Interactive Cohort Roll-Up & Return-Rate Inspector */}
+          {/* 2. Longitudinal Cohort Matrix & Diagonal Census Highlight */}
           <CohortMatrixInspector accent={accent} />
 
           {/* 3. Entering class to four-year Net Tuition Revenue (NTR) */}
@@ -120,6 +122,7 @@ export const App: React.FC = () => {
 
           <Footer
             repoUrl={D.repo_url}
+            linkedinUrl={D.linkedin_url}
             published={D.published}
           />
         </main>

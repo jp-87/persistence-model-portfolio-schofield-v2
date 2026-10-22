@@ -17,17 +17,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    entries: [
-      'index.html',
-      'src/**/*.{ts,tsx}',
-      '!_site/**',
-      '!site/**',
-      '!docs/**',
-      '!build/**',
-      '!.quarto/**',
-      '!_private/**',
-      '!dist/**',
-    ],
+    entries: ['index.html', 'src/**/*.{ts,tsx}'],
   },
   build: {
     rollupOptions: {
@@ -39,14 +29,5 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
-    watch: {
-      ignored: [
-        '**/_site/**',
-        '**/site/**',
-        '**/build/**',
-        '**/.quarto/**',
-        '**/_private/**',
-      ],
-    },
   },
 });

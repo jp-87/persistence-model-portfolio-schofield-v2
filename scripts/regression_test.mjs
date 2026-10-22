@@ -37,29 +37,44 @@ await runTest('test_entrypoint_and_static_assets', () => {
     'index.html must load ./src/main.tsx or /src/main.tsx'
   );
   assert.ok(
-    html.includes('https://jp-87.github.io/student-persistence-model/'),
-    'index.html must point canonical and og:url to https://jp-87.github.io/student-persistence-model/'
+    html.includes('https://jp-87.github.io/persistence-model-portfolio-schofield-v2/'),
+    'index.html must point canonical and og:url to https://jp-87.github.io/persistence-model-portfolio-schofield-v2/'
   );
   assert.ok(
-    html.includes('https://remix-student-persistence-model-9415.ai.studio'),
-    'index.html must include https://remix-student-persistence-model-9415.ai.studio'
+    html.includes('https://github.com/jp-87/persistence-model-portfolio-schofield-v2'),
+    'index.html must include canonical repository URL https://github.com/jp-87/persistence-model-portfolio-schofield-v2'
+  );
+  assert.ok(
+    !html.includes('ai.studio') &&
+      !html.includes('jp-87/student-persistence-model') &&
+      !html.includes('Markov'),
+    'index.html must not contain AI Studio remix URLs, mismatched repo URLs, or stale Markov metadata'
   );
   const readmeTxt = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   assert.ok(
-    readmeTxt.includes('https://jp-87.github.io/student-persistence-model/'),
+    readmeTxt.includes('https://jp-87.github.io/persistence-model-portfolio-schofield-v2/'),
     'README.md must link to GitHub Pages deployment URL'
   );
   assert.ok(
-    readmeTxt.includes('https://remix-student-persistence-model-9415.ai.studio'),
-    'README.md must link to https://remix-student-persistence-model-9415.ai.studio'
+    readmeTxt.includes('https://github.com/jp-87/persistence-model-portfolio-schofield-v2'),
+    'README.md must link to canonical GitHub repository https://github.com/jp-87/persistence-model-portfolio-schofield-v2'
+  );
+  assert.ok(
+    !readmeTxt.includes('ai.studio') &&
+      !readmeTxt.includes('jp-87/student-persistence-model'),
+    'README.md must not link to AI Studio remix URLs or mismatched repository URLs'
   );
 
   const logoPath = path.join(ROOT, 'public/figures/logo.png');
   assert.ok(fs.existsSync(logoPath), 'public/figures/logo.png must exist');
   assert.ok(fs.statSync(logoPath).size > 1000, 'public/figures/logo.png must be non-empty');
 
-  // Verify deprecated docs and figures are removed
+  // Verify deprecated docs, empty asset folders, and figures are removed
   assert.ok(!fs.existsSync(path.join(ROOT, 'docs')), 'Deprecated /docs directory must not exist');
+  assert.ok(
+    !fs.existsSync(path.join(ROOT, 'public/assets')),
+    'Orphaned /public/assets directory must not exist'
+  );
   assert.ok(
     !fs.existsSync(path.join(ROOT, 'data/forecast_ledger.csv')),
     'Deprecated data/forecast_ledger.csv must not exist'
@@ -250,8 +265,8 @@ await runTest('test_published_state_enabled', () => {
   assert.equal(siteData.published, true, 'siteData.published must be true');
   assert.equal(
     siteData.repo_url,
-    'https://github.com/jp-87/student-persistence-model',
-    'siteData.repo_url must point to jp-87/student-persistence-model'
+    'https://github.com/jp-87/persistence-model-portfolio-schofield-v2',
+    'siteData.repo_url must point to https://github.com/jp-87/persistence-model-portfolio-schofield-v2'
   );
 });
 
@@ -457,9 +472,9 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
     // Must render the 5 core sections in exact sequence
     const expectedHeadingsInOrder = [
       'Fall Net Tuition Revenue through 2030',
-      'Interactive Cohort Roll-Up &amp; Return-Rate Inspector',
+      'Longitudinal Cohort Matrix &amp; Diagonal Census Highlight',
       'Entering class to four-year Net Tuition Revenue (NTR)',
-      'Higher Education Enrollment &amp; Financial Aid Terminology Guide',
+      'Two-Stage Pipeline Architecture &amp; Higher-Ed Terminology Guide',
       'Entering class performance and Net Tuition Revenue at risk',
     ];
     let lastIdx = -1;
@@ -472,6 +487,11 @@ await runTest('test_calculator_module_invariants_and_ssr_dom_render', async () =
       );
       lastIdx = idx;
     }
+
+    assert.ok(
+      dom.includes('Longitudinal Cohort Matrix &amp; Diagonal Census Highlight'),
+      'Rendered DOM must include the Stage 2 Longitudinal Cohort Matrix & Diagonal Census Highlight table'
+    );
 
     // Must render SVG chart labels without <span> wrappers
     const svgTexts = dom.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];

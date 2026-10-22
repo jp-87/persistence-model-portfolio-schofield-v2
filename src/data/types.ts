@@ -106,5 +106,6 @@ export interface SiteData {
   };
   published: boolean;
   repo_url: string;
+  linkedin_url?: string;
 }
 

@@ -9,13 +9,14 @@ interface InteractiveSplitPanelProps {
   svgChart: React.ReactNode;
   chartLegend: React.ReactNode;
   chartFooterRight?: React.ReactNode;
+  rightPanelBottom?: React.ReactNode;
   className?: string;
 }
 
 /**
  * Enforces a strictly uniform 2-column grid layout across all interactive sections:
  * - Left-aligned panel: user-interactive controls, 2-stat KPI strip, and interactive summary table.
- * - Right-aligned panel: framed header, responsive SVG chart visualization, and legend/detail footer.
+ * - Right-aligned panel: framed header, responsive SVG chart visualization, legend/detail footer, and optional stacked bottom section.
  */
 export const InteractiveSplitPanel: React.FC<InteractiveSplitPanelProps> = ({
   controls,
@@ -26,6 +27,7 @@ export const InteractiveSplitPanel: React.FC<InteractiveSplitPanelProps> = ({
   svgChart,
   chartLegend,
   chartFooterRight,
+  rightPanelBottom,
   className = 'mt-3.5',
 }) => {
   return (
@@ -61,15 +63,18 @@ export const InteractiveSplitPanel: React.FC<InteractiveSplitPanelProps> = ({
 
         <div className="w-full my-auto">{svgChart}</div>
 
-        <div className="flex items-center justify-between gap-3 text-[11px] text-[#6f6d64] pt-2 mt-2 border-t border-[#e6e4dc] flex-wrap">
-          <div className="flex gap-3.5 flex-wrap items-center">
-            {chartLegend}
-          </div>
-          {chartFooterRight && (
-            <div className="font-mono text-[10.5px] text-[#1b1c18]">
-              {chartFooterRight}
+        <div>
+          <div className="flex items-center justify-between gap-3 text-[11px] text-[#6f6d64] pt-2 mt-2 border-t border-[#e6e4dc] flex-wrap">
+            <div className="flex gap-3.5 flex-wrap items-center">
+              {chartLegend}
             </div>
-          )}
+            {chartFooterRight && (
+              <div className="font-mono text-[10.5px] text-[#1b1c18]">
+                {chartFooterRight}
+              </div>
+            )}
+          </div>
+          {rightPanelBottom}
         </div>
       </div>
     </div>

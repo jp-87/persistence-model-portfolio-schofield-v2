@@ -8,35 +8,35 @@
     "flat": [
       {
         "fall": "2026FA",
-        "headcount": 3082,
+        "headcount": 5464,
         "ntr_m": 104.1,
         "p10_m": 101.9,
         "p90_m": 106.4
       },
       {
         "fall": "2027FA",
-        "headcount": 2970,
+        "headcount": 5233,
         "ntr_m": 99.7,
         "p10_m": 97.5,
         "p90_m": 102.1
       },
       {
         "fall": "2028FA",
-        "headcount": 2924,
+        "headcount": 5102,
         "ntr_m": 97.2,
         "p10_m": 94.8,
         "p90_m": 99.5
       },
       {
         "fall": "2029FA",
-        "headcount": 2909,
+        "headcount": 5029,
         "ntr_m": 95.8,
         "p10_m": 93.5,
         "p90_m": 98.3
       },
       {
         "fall": "2030FA",
-        "headcount": 2903,
+        "headcount": 4966,
         "ntr_m": 94.6,
         "p10_m": 92.3,
         "p90_m": 97.1
@@ -45,35 +45,35 @@
     "cliff": [
       {
         "fall": "2026FA",
-        "headcount": 3082,
+        "headcount": 5464,
         "ntr_m": 104.1,
         "p10_m": 101.9,
         "p90_m": 106.4
       },
       {
         "fall": "2027FA",
-        "headcount": 2948,
+        "headcount": 5196,
         "ntr_m": 99.0,
         "p10_m": 96.8,
         "p90_m": 101.4
       },
       {
         "fall": "2028FA",
-        "headcount": 2872,
+        "headcount": 5013,
         "ntr_m": 95.5,
         "p10_m": 93.2,
         "p90_m": 97.8
       },
       {
         "fall": "2029FA",
-        "headcount": 2832,
+        "headcount": 4897,
         "ntr_m": 93.3,
         "p10_m": 91.0,
         "p90_m": 95.7
       },
       {
         "fall": "2030FA",
-        "headcount": 2805,
+        "headcount": 4798,
         "ntr_m": 91.4,
         "p10_m": 89.1,
         "p90_m": 93.8
@@ -82,35 +82,35 @@
     "northeast": [
       {
         "fall": "2026FA",
-        "headcount": 3082,
+        "headcount": 5464,
         "ntr_m": 104.1,
         "p10_m": 101.9,
         "p90_m": 106.4
       },
       {
         "fall": "2027FA",
-        "headcount": 2937,
+        "headcount": 5170,
         "ntr_m": 98.5,
         "p10_m": 96.4,
         "p90_m": 101.2
       },
       {
         "fall": "2028FA",
-        "headcount": 2839,
+        "headcount": 4955,
         "ntr_m": 94.4,
         "p10_m": 92.3,
         "p90_m": 96.7
       },
       {
         "fall": "2029FA",
-        "headcount": 2775,
+        "headcount": 4798,
         "ntr_m": 91.4,
         "p10_m": 89.2,
         "p90_m": 93.8
       },
       {
         "fall": "2030FA",
-        "headcount": 2728,
+        "headcount": 4666,
         "ntr_m": 88.9,
         "p10_m": 86.8,
         "p90_m": 91.1
@@ -121,59 +121,59 @@
     {
       "cohort": "2021FA",
       "entrants": 1345,
-      "terms_scored": 12,
-      "actual_heads": 7339.0,
-      "expected_heads": 7215.0,
+      "terms_scored": 13,
+      "actual_heads": 9684.0,
+      "expected_heads": 9560.0,
       "rate_alpha_heads": 124.0,
       "mix_alpha_heads": 12.0,
-      "total_alpha_ntr_m": 2.38
+      "total_alpha_ntr_m": 2.59
     },
     {
       "cohort": "2022SP",
       "entrants": 244,
-      "terms_scored": 11,
-      "actual_heads": 1084.0,
-      "expected_heads": 1052.0,
+      "terms_scored": 12,
+      "actual_heads": 1708.0,
+      "expected_heads": 1676.0,
       "rate_alpha_heads": 32.0,
       "mix_alpha_heads": -3.0,
-      "total_alpha_ntr_m": 0.56
+      "total_alpha_ntr_m": 0.55
     },
     {
       "cohort": "2022FA",
       "entrants": 1245,
-      "terms_scored": 9,
-      "actual_heads": 6604.0,
-      "expected_heads": 6540.0,
+      "terms_scored": 10,
+      "actual_heads": 7851.0,
+      "expected_heads": 7787.0,
       "rate_alpha_heads": 64.0,
       "mix_alpha_heads": 10.0,
-      "total_alpha_ntr_m": 1.42
+      "total_alpha_ntr_m": 1.41
     },
     {
       "cohort": "2023SP",
       "entrants": 182,
-      "terms_scored": 8,
-      "actual_heads": 810.0,
-      "expected_heads": 788.0,
+      "terms_scored": 9,
+      "actual_heads": 1046.0,
+      "expected_heads": 1024.0,
       "rate_alpha_heads": 22.0,
       "mix_alpha_heads": 4.0,
-      "total_alpha_ntr_m": 0.50
+      "total_alpha_ntr_m": 0.49
     },
     {
       "cohort": "2023FA",
       "entrants": 1111,
-      "terms_scored": 6,
-      "actual_heads": 5329.0,
-      "expected_heads": 5112.0,
+      "terms_scored": 7,
+      "actual_heads": 5440.0,
+      "expected_heads": 5223.0,
       "rate_alpha_heads": 217.0,
       "mix_alpha_heads": -12.0,
-      "total_alpha_ntr_m": 3.94
+      "total_alpha_ntr_m": 3.90
     },
     {
       "cohort": "2024SP",
       "entrants": 186,
-      "terms_scored": 5,
-      "actual_heads": 621.0,
-      "expected_heads": 635.0,
+      "terms_scored": 6,
+      "actual_heads": 749.0,
+      "expected_heads": 763.0,
       "rate_alpha_heads": -14.0,
       "mix_alpha_heads": 3.0,
       "total_alpha_ntr_m": -0.21
@@ -181,12 +181,12 @@
     {
       "cohort": "2024FA",
       "entrants": 1159,
-      "terms_scored": 3,
+      "terms_scored": 4,
       "actual_heads": 3347.0,
       "expected_heads": 3398.0,
       "rate_alpha_heads": -51.0,
       "mix_alpha_heads": -8.0,
-      "total_alpha_ntr_m": -1.13
+      "total_alpha_ntr_m": -1.12
     }
   ],
   "discount_tiers": [
@@ -203,8 +203,8 @@
       "discount_rate": 0.0448,
       "first_year_retention": 0.852,
       "exit_hazard": 0.148,
-      "retained_ntr": 10376606,
-      "ntr_at_risk": 1802554
+      "retained_ntr": 10373373,
+      "ntr_at_risk": 1801947
     },
     {
       "tier_id": 2,
@@ -283,7 +283,7 @@
       "prevalence": 0.3286,
       "exit_hazard": 0.148,
       "lift": 1.064,
-      "ntr_at_risk": 1802553.6
+      "ntr_at_risk": 1801946.9
     },
     {
       "school": "MCM",
@@ -478,6 +478,7 @@
     }
   },
   "published": true,
-  "repo_url": "https://github.com/jp-87/student-persistence-model"
+  "repo_url": "https://github.com/jp-87/persistence-model-portfolio-schofield-v2",
+  "linkedin_url": "https://www.linkedin.com/in/john-schofield"
 }
 

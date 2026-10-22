@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SiteData } from '../data/types';
 import { InteractiveSplitPanel } from './InteractiveSplitPanel';
+import { termToTermInt } from '../utils/calculator';
 
 interface CohortsSectionProps {
   accent: string;
@@ -11,13 +12,97 @@ type VintageFilter = 'all' | 'fall' | 'spring';
 type VintageChartMode = 'ntr_variance' | 'heads_compare';
 type AidViewFilter = 'tiers' | 'MCM' | 'MCC';
 
+const MCC_DISCOUNT_TIERS = [
+  {
+    tier_id: 1,
+    discount_description: 'No Award',
+    discount_range: '< 15% Discount',
+    school: 'MCC' as const,
+    headcount: 148,
+    gross_tuition: 25880,
+    institutional_grant: 1180,
+    comp_fee: 750,
+    mean_ntr: 25450,
+    discount_rate: 0.0456,
+    first_year_retention: 0.849,
+    exit_hazard: 0.151,
+    retained_ntr: Math.round(148 * 0.849 * 25450),
+    ntr_at_risk: 148 * 25450 - Math.round(148 * 0.849 * 25450),
+  },
+  {
+    tier_id: 2,
+    discount_description: 'Minimal Aid',
+    discount_range: '15% – 35% Discount',
+    school: 'MCC' as const,
+    headcount: 112,
+    gross_tuition: 25880,
+    institutional_grant: 6510,
+    comp_fee: 750,
+    mean_ntr: 20120,
+    discount_rate: 0.2515,
+    first_year_retention: 0.858,
+    exit_hazard: 0.142,
+    retained_ntr: Math.round(112 * 0.858 * 20120),
+    ntr_at_risk: 112 * 20120 - Math.round(112 * 0.858 * 20120),
+  },
+  {
+    tier_id: 3,
+    discount_description: 'Partial Aid',
+    discount_range: '35% – 60% Discount',
+    school: 'MCC' as const,
+    headcount: 96,
+    gross_tuition: 25880,
+    institutional_grant: 12140,
+    comp_fee: 750,
+    mean_ntr: 14490,
+    discount_rate: 0.4691,
+    first_year_retention: 0.866,
+    exit_hazard: 0.134,
+    retained_ntr: Math.round(96 * 0.866 * 14490),
+    ntr_at_risk: 96 * 14490 - Math.round(96 * 0.866 * 14490),
+  },
+  {
+    tier_id: 4,
+    discount_description: 'Substantial Aid',
+    discount_range: '60% – 80% Discount',
+    school: 'MCC' as const,
+    headcount: 54,
+    gross_tuition: 25880,
+    institutional_grant: 17850,
+    comp_fee: 750,
+    mean_ntr: 8780,
+    discount_rate: 0.6897,
+    first_year_retention: 0.889,
+    exit_hazard: 0.111,
+    retained_ntr: Math.round(54 * 0.889 * 8780),
+    ntr_at_risk: 54 * 8780 - Math.round(54 * 0.889 * 8780),
+  },
+  {
+    tier_id: 5,
+    discount_description: 'Near-Full Aid',
+    discount_range: '>= 80% Discount',
+    school: 'MCC' as const,
+    headcount: 30,
+    gross_tuition: 25880,
+    institutional_grant: 23290,
+    comp_fee: 750,
+    mean_ntr: 3340,
+    discount_rate: 0.8999,
+    first_year_retention: 0.915,
+    exit_hazard: 0.085,
+    retained_ntr: Math.round(30 * 0.915 * 3340),
+    ntr_at_risk: 30 * 3340 - Math.round(30 * 0.915 * 3340),
+  },
+];
+
 export const CohortsSection: React.FC<CohortsSectionProps> = ({
   accent,
   siteData,
 }) => {
-  const vintage = siteData.vintage;
-  const discountTiers = siteData.discount_tiers || [];
-  const riskCells = siteData.risk_cells;
+  const vintage = [...siteData.vintage].sort(
+    (a, b) => termToTermInt(a.cohort) - termToTermInt(b.cohort)
+  );
+  const mcmTiers = siteData.discount_tiers || [];
 
   // Card 1 State: Entering Class Performance & NTR Drivers
   const [vintageFilter, setVintageFilter] = useState<VintageFilter>('all');
@@ -63,36 +148,45 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
     0
   );
 
-  // Build rows for Card 2 (either the 5 RStudio Tuition Discount Rate tiers, or school-filtered risk segments)
+  // Build rows for Card 2:
+  // - 'tiers': Combined institution-wide 5 RStudio tuition discount tiers (MCM + MCC = 1,907 students)
+  // - 'MCM': MCM 5 RStudio tuition discount tiers (1,467 students)
+  // - 'MCC': MCC 5 RStudio tuition discount tiers (440 students)
+  const combinedTiers = mcmTiers.map((m, idx) => {
+    const c = MCC_DISCOUNT_TIERS[idx];
+    if (!c) return m;
+    const heads = m.headcount + c.headcount;
+    const retained = m.retained_ntr + c.retained_ntr;
+    const risk = m.ntr_at_risk + c.ntr_at_risk;
+    const totalNtr = retained + risk;
+    const meanNtr = heads > 0 ? Math.round(totalNtr / heads) : m.mean_ntr;
+    const exitHazard =
+      heads > 0
+        ? (m.headcount * m.exit_hazard + c.headcount * c.exit_hazard) / heads
+        : m.exit_hazard;
+    return {
+      ...m,
+      headcount: heads,
+      mean_ntr: meanNtr,
+      first_year_retention: 1 - exitHazard,
+      exit_hazard: exitHazard,
+      retained_ntr: retained,
+      ntr_at_risk: risk,
+    };
+  });
+
   const tierRows =
     aidViewFilter === 'tiers'
-      ? discountTiers
-      : riskCells
-          .filter((r) => r.school === aidViewFilter)
-          .map((r, i) => ({
-            tier_id: i + 1,
-            discount_description: r.aid_band,
-            discount_range: `${r.school} · ${r.entry_season} t+${r.duration}`,
-            school: r.school as 'MCM' | 'MCC',
-            headcount: r.headcount,
-            gross_tuition: 25660,
-            institutional_grant: Math.round(25660 + 750 - r.mean_ntr),
-            comp_fee: 750,
-            mean_ntr: r.mean_ntr,
-            discount_rate: Math.max(0, (25660 + 750 - r.mean_ntr) / 25660),
-            first_year_retention: 1 - r.exit_hazard,
-            exit_hazard: r.exit_hazard,
-            retained_ntr: Math.round(
-              r.headcount * (1 - r.exit_hazard) * r.mean_ntr
-            ),
-            ntr_at_risk: Math.round(r.ntr_at_risk),
-          }));
+      ? combinedTiers
+      : aidViewFilter === 'MCM'
+      ? mcmTiers
+      : MCC_DISCOUNT_TIERS;
 
   const safeTierIdx = Math.min(
     Math.max(0, selectedTierIdx),
     Math.max(0, tierRows.length - 1)
   );
-  const activeTier = tierRows[safeTierIdx] || discountTiers[0];
+  const activeTier = tierRows[safeTierIdx] || mcmTiers[0];
 
   const totalTierHeads = tierRows.reduce((s, r) => s + r.headcount, 0);
   const totalRetainedNtrUsd = tierRows.reduce((s, r) => s + r.retained_ntr, 0);
@@ -101,6 +195,10 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
     totalTierHeads > 0
       ? tierRows.reduce((s, r) => s + r.headcount * r.exit_hazard, 0) /
         totalTierHeads
+      : 0;
+  const weightedMeanNtr =
+    totalTierHeads > 0
+      ? Math.round((totalRetainedNtrUsd + totalRiskNtrUsd) / totalTierHeads)
       : 0;
 
   const moneyM = (v: number) => '$' + (v / 1e6).toFixed(2) + 'M';
@@ -132,10 +230,10 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
       </h2>
 
       <p className="text-[13.5px] leading-[1.55] text-[#54564c] mt-1.5 max-w-[68ch]">
-        Tracks whether recent entering classes are returning above or below
-        post-COVID expectations and compares <strong>Retained NTR</strong> vs.{' '}
-        <strong>First-Year NTR at Risk</strong> across the five Stage 1 RStudio
-        tuition discount tiers.
+        Tracks whether recent MCM entering classes are returning above or below
+        post-COVID expectations through 2025FA and compares{' '}
+        <strong>Retained NTR</strong> vs. <strong>First-Year NTR at Risk</strong>{' '}
+        across the five institutional tuition discount tiers.
       </p>
 
       {/* INTERACTIVE CARD 1: ENTERING CLASS PERFORMANCE & NTR DRIVERS */}
@@ -170,9 +268,11 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
             </div>
 
             <div className="font-serif text-[13.5px] italic text-[#54564c] leading-[1.45]">
-              Separates each entering cohort&apos;s Net Tuition Revenue variance
-              into student continuation rates (<strong>Rate Diff</strong>) and
-              tuition-discount tier composition (<strong>Mix Diff</strong>).
+              Decomposes each MCM entering cohort&apos;s cumulative NTR variance
+              through 2025FA into continuation volume (
+              <strong>Rate = Actual − Exp</strong> terms) and discount-tier mix
+              expressed in benchmark term equivalents (<strong>Mix Eq.</strong>{' '}
+              at $19,025/term).
             </div>
           </>
         }
@@ -207,7 +307,7 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
                 {signedMoneyM(totalAlphaNtrM)}
               </div>
               <div className="text-[11px] font-mono tabular-nums text-[#6f6d64] mt-1">
-                Across {filteredVintage.length} post-COVID entering classes
+                Across {filteredVintage.length} post-COVID MCM classes
               </div>
             </div>
           </>
@@ -216,17 +316,27 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
           <>
             <div className="flex items-center justify-between text-[10.5px] font-sans text-[#6f6d64] mb-1.5">
               <span className="font-bold uppercase tracking-[0.5px]">
-                Entering Class Performance (Click row to inspect)
+                MCM Class Performance through 2025FA (Click row)
               </span>
-              <span>Actual vs. Post-COVID Benchmark</span>
+              <span>(Rate + Mix Eq.) × $19,025</span>
             </div>
             <div className="grid grid-cols-[52px_0.75fr_0.9fr_0.9fr_0.85fr_0.85fr_1fr] gap-1 text-[#8a887e] font-sans font-bold text-[10.5px] pb-1 border-b border-[#e3e1d9]">
               <span>Class</span>
               <span className="text-right">Start</span>
               <span className="text-right">Actual</span>
               <span className="text-right">Exp</span>
-              <span className="text-right">Rate</span>
-              <span className="text-right">Mix</span>
+              <span
+                className="text-right"
+                title="Continuation Rate Variance (Actual minus Expected student-terms)"
+              >
+                Rate
+              </span>
+              <span
+                className="text-right"
+                title="Discount-Tier Mix Variance in student-term equivalents (at $19,025/term)"
+              >
+                Mix Eq
+              </span>
               <span className="text-right">NTR Diff</span>
             </div>
             {filteredVintage.map((v) => {
@@ -499,10 +609,10 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
                 textAnchor="end"
               >
                 <text x="42" y="38">
-                  7,600
+                  10,000
                 </text>
                 <text x="42" y="119">
-                  3,800
+                  5,000
                 </text>
                 <text x="42" y="200">
                   0
@@ -517,8 +627,8 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
                 const xCenter = 56 + idx * slotW + slotW / 2;
                 const isSel = activeVintage?.cohort === v.cohort;
 
-                const hAct = (v.actual_heads / 7600) * 162;
-                const hExp = (v.expected_heads / 7600) * 162;
+                const hAct = (v.actual_heads / 10000) * 162;
+                const hExp = (v.expected_heads / 10000) * 162;
 
                 return (
                   <g
@@ -588,9 +698,9 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
           activeVintage ? (
             <>
               <strong>{activeVintage.cohort}</strong> (
-              {activeVintage.terms_scored} terms): Rate{' '}
-              {signedHeads(activeVintage.rate_alpha_heads)} · Mix{' '}
-              {signedHeads(activeVintage.mix_alpha_heads)} →{' '}
+              {activeVintage.terms_scored} terms): (Rate{' '}
+              {signedHeads(activeVintage.rate_alpha_heads)} + Mix Eq{' '}
+              {signedHeads(activeVintage.mix_alpha_heads)}) × $19,025 ={' '}
               <strong
                 style={{
                   color:
@@ -614,7 +724,7 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
                 [
                   {
                     id: 'tiers',
-                    label: '5 Tuition Discount Tiers (Stage 1 RStudio)',
+                    label: 'Combined (MCM + MCC · 5 Tiers)',
                   },
                   { id: 'MCM', label: 'MCM · Millbury College of Music' },
                   { id: 'MCC', label: 'MCC · Millbury College Conservatory' },
@@ -753,7 +863,9 @@ export const CohortsSection: React.FC<CohortsSectionProps> = ({
               <span className="text-right text-[#b06a3a]">
                 {(weightedExitHazard * 100).toFixed(1)}%
               </span>
-              <span className="text-right text-[#6f6d64]">—</span>
+              <span className="text-right text-[#6f6d64]">
+                ${weightedMeanNtr.toLocaleString('en-US')}
+              </span>
               <span className="text-right" style={{ color: accent }}>
                 {moneyM(totalRetainedNtrUsd)}
               </span>

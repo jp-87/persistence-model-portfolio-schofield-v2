@@ -334,3 +334,55 @@ export function computeEntrantProjection(
   };
 }
 
+/**
+ * Institutional SIS Term Translation & Numerical Encoding
+ * Grounded in authentic R / Positron IDE term_int schema (`synthetic_enrollment.csv`):
+ * - Summer (SU): calendar year YYYY, suffix 1 -> YYYY1 (e.g., 2025SU = 20251)
+ * - Fall (FA):   calendar year YYYY, suffix 2 -> YYYY2 (e.g., 2025FA = 20252)
+ * - Spring (SP): calendar year YYYY, suffix 3 -> (YYYY-1)3 (e.g., 2025SP = 20243, 2026SP = 20253)
+ *
+ * This provides authentic chronological sorting:
+ * ... < 20243 (2025SP) < 20251 (2025SU) < 20252 (2025FA) < 20253 (2026SP) < 20261 (2026SU) < 20262 (2026FA) ...
+ */
+export function termToTermInt(term: string): number {
+  const clean = term.trim().toUpperCase();
+  const year = parseInt(clean.slice(0, 4), 10);
+  const season = clean.slice(4);
+
+  if (season === 'SU') {
+    return year * 10 + 1;
+  }
+  if (season === 'FA') {
+    return year * 10 + 2;
+  }
+  if (season === 'SP') {
+    return (year - 1) * 10 + 3;
+  }
+  return year * 10;
+}
+
+export function termIntToTerm(termInt: number): string {
+  const academicYear = Math.floor(termInt / 10);
+  const suffix = termInt % 10;
+
+  if (suffix === 1) {
+    return `${academicYear}SU`;
+  }
+  if (suffix === 2) {
+    return `${academicYear}FA`;
+  }
+  if (suffix === 3) {
+    return `${academicYear + 1}SP`;
+  }
+  return `${academicYear}FA`;
+}
+
+export function compareTerms(termA: string, termB: string): number {
+  return termToTermInt(termA) - termToTermInt(termB);
+}
+
+export function sortTermsChronologically(terms: string[]): string[] {
+  return [...terms].sort(compareTerms);
+}
+
+
